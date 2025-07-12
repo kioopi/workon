@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VERSION="0.0.0"
+
+case ${1:-} in
+  --version|-v)
+        echo "workon $VERSION"; exit 0;;
+  --help|-h|*)
+        cat <<EOF
+workon — no features yet (Phase 0)
+Usage: workon [--version] [--help]
+EOF
+        exit 0;;
+esac
