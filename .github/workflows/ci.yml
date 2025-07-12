@@ -1,19 +1,20 @@
 name: CI
 on: [push, pull_request]
-
 jobs:
-  lint:
+  shellcheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-          npm install -g bats
-      - name: Check dependencies
-        run: ./bin/check-deps
-      - name: Run shellcheck
-        run: shellcheck bin/workon bin/check-deps bin/src/pls-open
-      - name: Run tests
-        run: bats test/unit/
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Run ShellCheck
+        run: shellcheck bin/*
+
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+      - name: Run Bats tests
+        run: bats test/unit/*.bats

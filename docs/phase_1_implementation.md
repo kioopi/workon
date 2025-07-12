@@ -155,6 +155,3 @@ Place a dummy README.md next to it so the resource resolves.
 - Function shells are already modular → Session writing will slot into spawn loop in Phase 2.
 
 ---
-
-> **Next milestone:** Add session cache & `workon stop` (see ROADMAP Phase 2). Commit early, commit often!
-

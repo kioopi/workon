@@ -106,7 +106,7 @@ Run `./bin/check-deps` to verify all dependencies.
 bats test/unit/
 
 # Run linting
-shellcheck bin/workon bin/check-deps bin/src/pls-open
+shellcheck bin/*
 ```
 
 ### Pre-commit hooks
