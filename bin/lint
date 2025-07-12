@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# lint — centralized shellcheck runner for WorkOn project
+
+VERSION="0.0.0"
+
+# Definitive list of shell scripts to check
+SHELL_SCRIPTS=(
+    "bin/workon"
+    "bin/check-deps"
+    "bin/lint"
+    "bin/pls-open"
+)
+
+usage() {
+    cat <<EOF
+lint — shellcheck runner for WorkOn
+
+Usage: $0 [OPTIONS]
+
+Options:
+  -q, --quiet     Suppress output on success
+  -v, --version   Show version
+  -h, --help      Show this help
+
+Exit codes:
+  0  All scripts pass shellcheck
+  1  One or more scripts have issues
+  2  shellcheck not available
+EOF
+}
+
+QUIET=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -q|--quiet)   QUIET=true; shift;;
+        -v|--version) echo "lint $VERSION"; exit 0;;
+        -h|--help)    usage; exit 0;;
+        -*)           echo "Unknown option: $1" >&2; usage >&2; exit 1;;
+        *)            echo "Unexpected argument: $1" >&2; usage >&2; exit 1;;
+    esac
+done
+
+# Check if shellcheck is available
+if ! command -v shellcheck >/dev/null 2>&1; then
+    echo "❌ shellcheck not found. Install with: apt install shellcheck / brew install shellcheck" >&2
+    exit 2
+fi
+
+# Run shellcheck on all scripts
+if [[ $QUIET == false ]]; then
+    echo "Running shellcheck on ${#SHELL_SCRIPTS[@]} scripts..."
+fi
+
+FAILED=false
+for script in "${SHELL_SCRIPTS[@]}"; do
+    if [[ ! -f "$script" ]]; then
+        echo "⚠️  Script not found: $script" >&2
+        continue
+    fi
+    
+    if ! shellcheck "$script" 2>/dev/null; then
+        echo "❌ ShellCheck failed: $script" >&2
+        FAILED=true
+    elif [[ $QUIET == false ]]; then
+        echo "✓ $script"
+    fi
+done
+
+if [[ $FAILED == true ]]; then
+    echo "❌ ShellCheck failed for one or more scripts" >&2
+    exit 1
+fi
+
+if [[ $QUIET == false ]]; then
+    echo "✓ All shell scripts passed shellcheck"
+fi
