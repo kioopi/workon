@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+#
+# pls-open 2.5 – force a file (or URL) to open with a specific XDG desktop entry
+#
+# Usage:
+#   pls-open [OPTIONS] <desktop-id|FILE|URL> [FILE]
+#
+# Behaviour:
+#   • If the first non‑option argument:
+#       – ends with “.desktop” **and** is a readable file → treat it as the
+#         desktop‑entry path to use.
+#       – contains “://” **or** resolves to an existing path and *no second
+#         argument is given* → delegate straight to `xdg-open`, honouring the
+#         user’s default application.
+#   • Otherwise the argument is interpreted as the *desktop‑id* (basename of a
+#     .desktop file) and the optional second parameter is passed to that app.
+#
+# Options:
+#   -n, --dry-run    Show *exactly* what would be executed (after all wrappers)
+#                    and exit.  When delegation occurs, prints the `xdg-open…`
+#                    command instead.
+#   -k, --keep-open  Keep the spawned terminal open after the command finishes
+#                    (ignored when the desktop entry does not request a terminal
+#                    or when the call is delegated to `xdg-open`).
+#   -h, --help       Show this help and exit.
+#
+# Examples:
+#   pls-open code index.py        # open with VS Code regardless of default
+#   pls-open index.html           # falls back to `xdg-open index.html`
+#   pls-open ./foo.desktop        # launch using an explicit desktop file
+#
+set -euo pipefail
+
+# ---------- constants --------------------------------------------------------
+DEFAULT_TERMINAL="${TERMINAL:-/usr/bin/alacritty}"
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
+# ---------- helpers ----------------------------------------------------------
+usage() { grep -E "^#( |$)" "$0" | sed 's/^# //' >&2; exit 1; }
+
+die()   { printf 'pls-open: %s\n' "$*" >&2; exit 2; }
+
+# get_value <key> <desktop-file>
+get_value() {
+    local key="$1" file="$2"
+    awk -F= -v sel_key="$key" '
+        /^\[Desktop Entry\]/ {section=1; next}
+        section && $1==sel_key {print $2; exit}
+    ' "$file"
+}
+
+# resolve_desktop_file <id>
+resolve_desktop_file() {
+    local id="$1"
+    local -a paths=("$XDG_DATA_HOME/applications")
+
+    IFS=: read -ra dirs <<<"$XDG_DATA_DIRS"
+    for d in "${dirs[@]}"; do
+        paths+=("$d/applications")
+    done
+
+    for p in "${paths[@]}"; do
+        local candidate="$p/$id.desktop"
+        [[ -r $candidate ]] && { echo "$candidate"; return; }
+    done
+
+    die "Cannot locate desktop file for '$id'"
+}
+
+# substitute_placeholders <exec-line> <file> <desktop-id> <desktop-path>
+substitute_placeholders() {
+    local cmd="$1" file="$2" id="$3" path="$4"
+
+    cmd=${cmd//%[fFuU]/$file}
+    cmd=${cmd//%c/$id}
+    cmd=${cmd//%k/$path}
+    cmd=${cmd//%i/}  # strip icon placeholder
+
+    echo "$cmd"
+}
+
+# ---------- option parsing ---------------------------------------------------
+DRY_RUN=false
+KEEP_OPEN=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -n|--dry-run)   DRY_RUN=true; shift;;
+        -k|--keep-open) KEEP_OPEN=true; shift;;
+        -h|--help)      usage;;
+        --)             shift; break;;
+        -*)             die "Unknown option: $1";;
+        *)              break;;
+    esac
+done
+
+[[ $# -lt 1 ]] && usage
+
+# ---------- delegation / desktop-file short‑circuit --------------------------
+first_arg="$1"
+shift || true  # leave $@ intact if there were no more params
+
+# Case 1: explicit .desktop path
+if [[ -f $first_arg && $first_arg == *.desktop ]]; then
+    desktop_file="$first_arg"
+    desktop_id="${first_arg##*/}"
+    desktop_id="${desktop_id%.desktop}"
+    target_file="${1:-}"
+
+# Case 2: single argument that looks like a file or URL → delegate
+elif [[ $# -eq 0 && ( $first_arg == *://* || -e $first_arg || $first_arg == */* ) ]]; then
+    if "$DRY_RUN"; then
+        printf '%q ' xdg-open "$first_arg"
+        printf '\n'
+        exit 0
+    fi
+    if "$KEEP_OPEN"; then
+        printf 'Note: --keep-open ignored when delegating to xdg-open\n' >&2
+    fi
+    exec xdg-open "$first_arg"
+
+# Otherwise treat first_arg as a desktop‑id
+else
+    desktop_id="$first_arg"
+    target_file="${1:-}"
+    desktop_file="$(resolve_desktop_file "$desktop_id")"
+fi
+
+# ---------- collect Exec line & Terminal flag -------------------------------
+exec_line="$(get_value Exec "$desktop_file")"
+[[ -z $exec_line ]] && die "No Exec entry in $desktop_file"
+
+needs_terminal="$(get_value Terminal "$desktop_file" | tr '[:upper:]' '[:lower:]')"
+
+cmd="$(substitute_placeholders "$exec_line" "$target_file" "$desktop_id" "$desktop_file")"
+
+# ---------- handle flags that depend on desktop entry ------------------------
+if [[ $needs_terminal != "true" && $KEEP_OPEN == true ]]; then
+    printf 'Note: --keep-open ignored because Terminal=false in %s\n' "$desktop_file" >&2
+    KEEP_OPEN=false
+fi
+
+# ---------- build the final command array -----------------------------------
+declare -a final_cmd
+if [[ $needs_terminal == "true" ]]; then
+    if "$KEEP_OPEN"; then
+        final_cmd=("$DEFAULT_TERMINAL" -e bash -c "$cmd; exec bash")
+    else
+        final_cmd=("$DEFAULT_TERMINAL" -e bash -c "$cmd")
+    fi
+else
+    final_cmd=(bash -c "$cmd")
+fi
+
+# ---------- dry‑run output ---------------------------------------------------
+if "$DRY_RUN"; then
+    printf '%q ' "${final_cmd[@]}"
+    printf '\n'
+    exit 0
+fi
+
+# ---------- execution --------------------------------------------------------
+exec "${final_cmd[@]}"
+

@@ -1,0 +1,23 @@
+resources:
+  ide: code .
+  terminal: alacrity .
+  readme: README.md
+  notes: nvim notes.md
+
+  # URLs to open in browser
+  web: "{{ NEXT_PUBLIC_SERVER_URL }}"
+  admin: "{{ NEXT_PUBLIC_SERVER_URL }}/admin"
+  process: overmind Procfile
+
+layouts:
+  desktop:
+    - [ide]
+    - [web, admin]
+    - [terminal, readme, notes, process]
+
+  mobile:
+    - [ide]
+    - [web]
+    - [notes, process]
+
+default_layout: default
