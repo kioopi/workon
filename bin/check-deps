@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# check-deps — validate WorkOn development dependencies
+
+VERSION="0.0.0"
+ERRORS=0
+
+check_command() {
+    local cmd="$1" desc="$2" install_hint="$3"
+    if command -v "$cmd" >/dev/null 2>&1; then
+        printf "✓ %s (%s)\n" "$cmd" "$desc"
+    else
+        printf "✗ %s missing — %s\n" "$cmd" "$desc"
+        printf "  Install: %s\n" "$install_hint"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
+echo "WorkOn dependency check v$VERSION"
+echo
+
+# Core shell tools
+check_command "bash" "Shell interpreter" "system package manager"
+check_command "shellcheck" "Shell linting" "apt install shellcheck / brew install shellcheck"
+
+# Testing (development only)
+if [[ ${1:-} != "--runtime-only" ]]; then
+    check_command "bats" "Test framework" "npm install -g bats / brew install bats-core"
+fi
+
+# Future dependencies (commented for now)
+# check_command "yq" "YAML processor" "brew install yq / snap install yq"
+# check_command "jq" "JSON processor" "apt install jq / brew install jq"
+# check_command "awesome-client" "AwesomeWM client" "apt install awesome"
+
+echo
+if [[ $ERRORS -eq 0 ]]; then
+    echo "All dependencies satisfied ✓"
+    exit 0
+else
+    echo "$ERRORS missing dependencies ✗"
+    exit 1
+fi

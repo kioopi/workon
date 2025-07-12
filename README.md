@@ -89,3 +89,35 @@ Everything else (named tags, multiple monitors, resource flags, safety switches)
 
 With those pieces WorkOn gives any contributor a **single command** to recreate and later dismiss the exact working environment the project expects, boosting onboarding speed and day-to-day productivity while staying just a thin wrapper around time-tested Unix utilities.
 
+## Development
+
+### Requirements
+
+- `bash` 4.0+
+- `shellcheck` (for linting)
+- `bats` (for testing)
+
+Run `./bin/check-deps` to verify all dependencies.
+
+### Testing
+
+```bash
+# Run all tests
+bats test/unit/
+
+# Run linting
+shellcheck bin/workon bin/check-deps bin/src/pls-open
+```
+
+### Pre-commit hooks
+
+Pre-commit hooks automatically run shellcheck on every commit. If you need to skip them:
+
+```bash
+git commit --no-verify
+```
+
+### Included Tools
+
+This repository includes a vendored copy of `pls-open` in `bin/src/pls-open` for convenience. This ensures the tool is available even if not installed system-wide during early development phases.
+
