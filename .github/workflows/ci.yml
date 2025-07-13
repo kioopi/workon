@@ -10,6 +10,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck bats jq awesome
+          # Install bats-support
+          sudo git clone https://github.com/bats-core/bats-support.git /usr/lib/bats/bats-support
+          # Install bats-assert
+          sudo git clone https://github.com/bats-core/bats-assert.git /usr/lib/bats/bats-assert
           # Install yq v4 from GitHub releases (Ubuntu apt has v3)
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq

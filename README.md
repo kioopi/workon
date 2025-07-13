@@ -101,12 +101,20 @@ Run `./bin/check-deps` to verify all dependencies.
 
 ### Testing
 
+WorkOn uses [BATS](https://bats-core.readthedocs.io/) for testing. See [docs/testing.md](docs/testing.md) for detailed testing documentation.
+
 ```bash
 # Run all tests
 bats test/unit/
 
+# Run specific test file
+bats test/unit/phase1.bats
+
 # Run linting
 ./bin/lint
+
+# Check dependencies
+./bin/check-deps
 ```
 
 ### Pre-commit hooks

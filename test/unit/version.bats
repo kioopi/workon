@@ -1,30 +1,45 @@
 #!/usr/bin/env bats
 
-@test "workon --version exits 0" {
+# Load BATS libraries (system installation paths)
+load '/usr/lib/bats/bats-support/load'
+load '/usr/lib/bats/bats-assert/load'
+
+# Load common test helpers
+load '../test_helper/common'
+
+@test "workon --version: exits successfully and shows version" {
     run ./bin/workon --version
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ workon\ 0\.1\.0-alpha ]]
+    
+    assert_success
+    assert_output --partial "workon 0.1.0-alpha"
 }
 
-@test "workon --help exits 0" {
+@test "workon --help: exits successfully and shows usage" {
     run ./bin/workon --help
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "Usage:" ]]
+    
+    assert_success
+    assert_output --partial "Usage:"
+    assert_output --partial "PROJECT_PATH"
 }
 
-@test "check-deps script exists and is executable" {
+@test "check-deps script: exists and is executable" {
+    # Using manual [ -x ] check since assert_file_executable is not available in standard bats-assert
     [ -x "./bin/check-deps" ]
 }
 
-@test "pls-open is executable" {
+@test "pls-open script: exists and is executable" {
+    # Using manual [ -x ] check since assert_file_executable is not available in standard bats-assert
     [ -x "./bin/pls-open" ]
 }
 
-@test "lint script exists and is executable" {
+@test "lint script: exists and is executable" {
+    # Using manual [ -x ] check since assert_file_executable is not available in standard bats-assert
     [ -x "./bin/lint" ]
 }
 
-@test "lint script runs successfully" {
+@test "lint script: runs successfully without errors" {
     run ./bin/lint --quiet
-    [ "$status" -eq 0 ]
+    
+    assert_success
+    refute_output
 }
