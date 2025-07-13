@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# Load BATS libraries
+# Load BATS libraries (system installation paths)
 load '/usr/lib/bats/bats-support/load'
 load '/usr/lib/bats/bats-assert/load'
 

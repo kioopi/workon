@@ -1,16 +1,11 @@
 #!/usr/bin/env bats
 
-# Load BATS libraries
+# Load BATS libraries (system installation paths)
 load '/usr/lib/bats/bats-support/load'
 load '/usr/lib/bats/bats-assert/load'
 
 # Load common test helpers
 load '../test_helper/common'
-
-setup() {
-    # Save original directory for script access
-    ORIG_DIR="$PWD"
-}
 
 @test "workon --version: exits successfully and shows version" {
     run ./bin/workon --version
@@ -28,14 +23,17 @@ setup() {
 }
 
 @test "check-deps script: exists and is executable" {
+    # Using manual [ -x ] check since assert_file_executable is not available in standard bats-assert
     [ -x "./bin/check-deps" ]
 }
 
 @test "pls-open script: exists and is executable" {
+    # Using manual [ -x ] check since assert_file_executable is not available in standard bats-assert
     [ -x "./bin/pls-open" ]
 }
 
 @test "lint script: exists and is executable" {
+    # Using manual [ -x ] check since assert_file_executable is not available in standard bats-assert
     [ -x "./bin/lint" ]
 }
 
