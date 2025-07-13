@@ -1,5 +1,12 @@
 #!/usr/bin/env bats
 
+# Load BATS libraries
+load '/usr/lib/bats/bats-support/load'
+load '/usr/lib/bats/bats-assert/load'
+
+# Load common test helpers
+load '../test_helper/common'
+
 setup() {
     # Save original directory
     ORIG_DIR="$PWD"
@@ -14,169 +21,188 @@ teardown() {
     rm -rf "$TEST_DIR"
 }
 
-# Helper function to test find_manifest
-test_find_manifest() {
-    local search_dir="$1"
-    bash -c "
-        set -euo pipefail
-        find_manifest() {
-            local dir
-            dir=\$(realpath \"\${1:-\$PWD}\")
-            
-            while [[ \$dir != / ]]; do
-                if [[ -f \$dir/workon.yaml ]]; then
-                    printf '%s/workon.yaml' \"\$dir\"
-                    return 0
-                fi
-                dir=\$(dirname \"\$dir\")
-            done
-            
-            return 1
-        }
-        find_manifest '$search_dir'
-    "
-}
-
-@test "find_manifest: finds workon.yaml in current directory" {
-    echo "resources: {}" > workon.yaml
+@test "find_manifest: locates workon.yaml in current directory" {
+    # Arrange
+    create_minimal_manifest
     
+    # Act
     run test_find_manifest "$PWD"
-    [ "$status" -eq 0 ]
-    [[ "$output" == "$PWD/workon.yaml" ]]
+    
+    # Assert
+    assert_success
+    assert_output "$PWD/workon.yaml"
 }
 
-@test "find_manifest: finds workon.yaml in parent directory" {
-    echo "resources: {}" > workon.yaml
+@test "find_manifest: locates workon.yaml in parent directory" {
+    # Arrange
+    create_minimal_manifest
     mkdir subdir
     cd subdir
     
+    # Act
     run test_find_manifest "$PWD"
-    [ "$status" -eq 0 ]
-    [[ "$output" == "$(dirname "$PWD")/workon.yaml" ]]
+    
+    # Assert
+    assert_success
+    assert_output "$(dirname "$PWD")/workon.yaml"
 }
 
-@test "find_manifest: fails when no workon.yaml found" {
+@test "find_manifest: fails when no workon.yaml exists" {
+    # Act
     run test_find_manifest "$PWD"
-    [ "$status" -eq 1 ]
+    
+    # Assert
+    assert_failure
+    refute_output
 }
 
-# Helper function to test render_template
-test_render_template() {
-    local input="$1"
-    bash -c "
-        set -euo pipefail
-        render_template() {
-            local input=\"\$1\"
-            local converted
-            converted=\$(printf '%s' \"\$input\" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}\}/\${\1\2}/g')
-            (set +u; eval \"printf '%s' \\\"\$converted\\\"\")
-        }
-        render_template '$input'
-    "
-}
-
-@test "render_template: basic variable substitution" {
+@test "render_template: performs basic variable substitution" {
+    # Arrange
     export TEST_VAR="test_value"
     
+    # Act
     run test_render_template "Hello {{TEST_VAR}}"
-    [ "$status" -eq 0 ]
-    [[ "$output" == "Hello test_value" ]]
+    
+    # Assert
+    assert_success
+    assert_output "Hello test_value"
 }
 
-@test "render_template: multiple variables" {
+@test "render_template: handles multiple variables in single template" {
+    # Arrange
     export VAR1="first"
     export VAR2="second"
     
+    # Act
     run test_render_template "{{VAR1}} and {{VAR2}}"
-    [ "$status" -eq 0 ]
-    [[ "$output" == "first and second" ]]
-}
-
-@test "render_template: undefined variable stays as empty" {
-    run test_render_template "Hello {{UNDEFINED_VAR}}"
-    [ "$status" -eq 0 ]
-    [[ "$output" == "Hello " ]]
-}
-
-@test "render_template: default value when variable undefined" {
-    unset DEFAULT_TEST_VAR || true
     
-    run test_render_template "Hello {{DEFAULT_TEST_VAR:-world}}"
-    [ "$status" -eq 0 ]
-    [[ "$output" == "Hello world" ]]
+    # Assert
+    assert_success
+    assert_output "first and second"
 }
 
-@test "render_template: variable overrides default value" {
-    export DEFAULT_TEST_VAR="custom"
-    
-    run test_render_template "Hello {{DEFAULT_TEST_VAR:-world}}"
-    [ "$status" -eq 0 ]
-    [[ "$output" == "Hello custom" ]]
-}
-
-@test "render_template: complex default values" {
-    unset URL_VAR || true
-    
-    run test_render_template "URL: {{URL_VAR:-https://example.com/path?param=value}}"
-    [ "$status" -eq 0 ]
-    [[ "$output" == "URL: https://example.com/path?param=value" ]]
-}
-
-@test "render_template: mixed variables with and without defaults" {
-    export DEFINED_VAR="defined"
+@test "render_template: leaves undefined variables as empty strings" {
+    # Arrange
     unset UNDEFINED_VAR || true
     
+    # Act
+    run test_render_template "Hello {{UNDEFINED_VAR}}"
+    
+    # Assert
+    assert_success
+    assert_output "Hello "
+}
+
+@test "render_template: uses default value when variable undefined" {
+    # Arrange
+    unset DEFAULT_TEST_VAR || true
+    
+    # Act
+    run test_render_template "Hello {{DEFAULT_TEST_VAR:-world}}"
+    
+    # Assert
+    assert_success
+    assert_output "Hello world"
+}
+
+@test "render_template: variable overrides default value when defined" {
+    # Arrange
+    export DEFAULT_TEST_VAR="custom"
+    
+    # Act
+    run test_render_template "Hello {{DEFAULT_TEST_VAR:-world}}"
+    
+    # Assert
+    assert_success
+    assert_output "Hello custom"
+}
+
+@test "render_template: handles complex default values with special characters" {
+    # Arrange
+    unset URL_VAR || true
+    
+    # Act
+    run test_render_template "URL: {{URL_VAR:-https://example.com/path?param=value}}"
+    
+    # Assert
+    assert_success
+    assert_output "URL: https://example.com/path?param=value"
+}
+
+@test "render_template: processes mixed variables with and without defaults" {
+    # Arrange
+    export DEFINED_VAR="defined"
+    unset UNDEFINED_VAR || true
+    unset PLAIN_VAR || true
+    
+    # Act
     run test_render_template "{{DEFINED_VAR}} and {{UNDEFINED_VAR:-default}} and {{PLAIN_VAR}}"
-    [ "$status" -eq 0 ]
-    [[ "$output" == "defined and default and " ]]
-}
-
-@test "workon --version shows correct version" {
-    run "$ORIG_DIR/bin/workon" --version
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "workon 0.1.0-alpha" ]]
-}
-
-@test "workon --help shows usage" {
-    run "$ORIG_DIR/bin/workon" --help
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "Usage:" ]]
-    [[ "$output" =~ "PROJECT_PATH" ]]
-}
-
-@test "workon fails with no manifest" {
-    run "$ORIG_DIR/bin/workon"
-    [ "$status" -eq 2 ]
-    [[ "$output" =~ "No workon.yaml found" ]]
-}
-
-@test "workon fails with invalid YAML" {
-    cat > workon.yaml <<EOF
-invalid: yaml: syntax [
-EOF
     
-    run "$ORIG_DIR/bin/workon"
-    [ "$status" -eq 2 ]
-    [[ "$output" =~ "Failed to parse" ]]
+    # Assert
+    assert_success
+    assert_output "defined and default and "
 }
 
-@test "workon fails with missing resources section" {
-    cat > workon.yaml <<EOF
-layouts:
-  desktop: []
-EOF
+@test "workon --version: displays current version information" {
+    # Act
+    run_workon --version
     
-    run "$ORIG_DIR/bin/workon"
-    [ "$status" -eq 2 ]
-    [[ "$output" =~ "missing 'resources' section" ]]
+    # Assert
+    assert_success
+    assert_output --partial "workon 0.1.0-alpha"
 }
 
-@test "workon fails with empty resources" {
-    cat > workon.yaml <<EOF
-resources: {}
-EOF
+@test "workon --help: displays usage information and options" {
+    # Act
+    run_workon --help
     
-    run "$ORIG_DIR/bin/workon"
-    [ "$status" -eq 2 ]
-    [[ "$output" =~ "No resources defined" ]]
+    # Assert
+    assert_success
+    assert_output --partial "Usage:"
+    assert_output --partial "PROJECT_PATH"
+}
+
+@test "workon: fails with helpful error when no manifest found" {
+    # Act
+    run_workon
+    
+    # Assert
+    assert_failure 2
+    assert_output --partial "No workon.yaml found"
+}
+
+@test "workon: fails gracefully with invalid YAML syntax" {
+    # Arrange
+    create_invalid_yaml
+    
+    # Act
+    run_workon
+    
+    # Assert
+    assert_failure 2
+    assert_output --partial "Failed to parse"
+}
+
+@test "workon: fails when manifest missing required resources section" {
+    # Arrange
+    create_manifest_without_resources
+    
+    # Act
+    run_workon
+    
+    # Assert
+    assert_failure 2
+    assert_output --partial "missing 'resources' section"
+}
+
+@test "workon: fails when resources section is empty" {
+    # Arrange
+    create_empty_resources_manifest
+    
+    # Act
+    run_workon
+    
+    # Assert
+    assert_failure 2
+    assert_output --partial "No resources defined"
 }
