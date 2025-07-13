@@ -46,8 +46,14 @@ launch_resource() {
     printf '  %s: %s\n' "$name" "$command" >&2
     
     # Spawn via awesome-client
-    if ! awesome-client "awful.spawn(\"$escaped_cmd\")" >/dev/null 2>&1 &
-    then
+    awesome-client "awful.spawn(\"$escaped_cmd\")" >/dev/null 2>&1 &
+    local spawn_pid=$!
+    
+    # Give the process a moment to start
+    sleep 0.1
+    
+    # Check if the process is still running
+    if ! kill -0 "$spawn_pid" 2>/dev/null; then
         printf 'Warning: Failed to spawn %s\n' "$name" >&2
         return 1
     fi
@@ -96,6 +102,7 @@ check_dependencies() {
     command -v yq >/dev/null || missing+=(yq)
     command -v jq >/dev/null || missing+=(jq)
     command -v awesome-client >/dev/null || missing+=(awesome-client)
+    command -v realpath >/dev/null || missing+=(realpath)
     
     if [[ ${#missing[@]} -gt 0 ]]; then
         die "Missing required dependencies: ${missing[*]}"
