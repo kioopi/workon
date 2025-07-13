@@ -31,8 +31,8 @@ workon/               # project repo
 
 | Tool                | Why we need it                                         | Install                                                              | Docs                                                                           |
 | ------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **yq v4**           | YAML → JSON conversion (`yq eval -o=json`)             | `sudo apt install yq`                                                | [https://mikefarah.gitbook.io/yq/](https://mikefarah.gitbook.io/yq/)           |
-| **envsubst**        | Variable substitution `{{VAR}}` → `$VAR`               | `sudo apt install gettext-base`                                      | [https://www.gnu.org/software/gettext/](https://www.gnu.org/software/gettext/) |
+| **yq v4**           | YAML → JSON conversion (`yq eval -o=json`)             | `sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq`                                                | [https://mikefarah.gitbook.io/yq/](https://mikefarah.gitbook.io/yq/)           |
+| **bash**            | Parameter expansion for `{{VAR:-default}}` syntax      | Built-in with bash 4.0+                                              | [https://www.gnu.org/software/bash/](https://www.gnu.org/software/bash/) |
 | **awesome-client**  | Remote control of AwesomeWM (`awesome-client '<lua>'`) | part of `awesome` pkg                                                | [https://awesomewm.org/](https://awesomewm.org/)                               |
 | **pls-open**   | Launch shim honoring `Terminal=true`                   | our script                                                           | see repo                                                                       |
 | **ShellCheck**      | Lint bash in CI                                        | `apt install shellcheck`                                             | [https://www.shellcheck.net/](https://www.shellcheck.net/)                     |
@@ -75,17 +75,26 @@ Exit codes:
    manifest_json=$(yq eval -o=json '.' "$manifest") || die "yq failed"
    resources=$(jq -r '.resources | to_entries[] | @base64' <<<"$manifest_json")
    ```
-3. **Environment substitution** *Accept only **``** patterns.*
+3. **Environment substitution** *Supports **`{{VAR}}`** and **`{{VAR:-default}}`** patterns.*
    ```bash
-   render() { printf '%s' "$1" | sed -E 's/\{\{([A-Z0-9_]+)\}\}/${\1}/g' | envsubst; }
+   render_template() { 
+       local input="$1"
+       # Convert {{VAR}} and {{VAR:-default}} to ${VAR} and ${VAR:-default} format
+       local converted
+       converted=$(printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}\}/${\1\2}/g')
+       # Use bash parameter expansion for defaults
+       (set +u; eval "printf '%s' \"$converted\"")
+   }
    ```
 4. **Spawn each resource** (current tag)
    ```bash
    while read -r entry; do
-       name=$(jq -r 'fromjson.key' <<<"$entry")
-       raw=$(jq -r 'fromjson.value' <<<"$entry")
+       name=$(printf '%s' "$entry" | base64 -d | jq -r '.key')
+       raw=$(printf '%s' "$entry" | base64 -d | jq -r '.value') 
        cmd=$(render "$raw")
-       awesome-client "awful.spawn(\"pls-open $cmd\")" &
+       # Properly escape command for awesome-client
+       escaped_cmd=$(printf '%s' "pls-open $cmd" | sed 's/"/\\"/g')
+       awesome-client "awful.spawn(\"$escaped_cmd\")" &
    done <<<"$resources"
    wait  # ensure script exits only after all awful.spawn queued
    ```
@@ -143,9 +152,11 @@ Place a dummy README.md next to it so the resource resolves.
 
 | Problem                 | Symptom                             | Fix                                                  |
 | ----------------------- | ----------------------------------- | ---------------------------------------------------- |
-| yq v3 installed         | `unknown flag: -o`                  | `sudo snap remove yq`; reinstall v4 binary.          |
+| yq v3 installed         | `unknown flag: -o`                  | Ubuntu apt has v3; install v4 from GitHub releases.  |
 | env var not substituted | `web: "{{URL}}"` opens literally    | Export URL before running; or document `.env`.       |
 | Awesome not running     | `awesome-client: unable to connect` | Run inside login Awesome session; for CI use Xephyr. |
+| Invalid YAML structure  | `jq: error parsing`                  | Validate YAML has `resources:` key; check syntax.    |
+| Command escaping issues | Spawn failures with special chars   | Use proper shell quoting in awesome-client calls.    |
 
 ---
 

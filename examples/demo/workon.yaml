@@ -1,0 +1,7 @@
+resources:
+  ide: code .
+  readme: README.md
+  terminal: alacritty
+  docs: https://awesomewm.org/
+  web: "{{DEMO_URL:-https://example.com}}"
+  notes: nvim notes.md

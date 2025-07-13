@@ -3,7 +3,7 @@ set -euo pipefail
 
 # check-deps — validate WorkOn development dependencies
 
-VERSION="0.0.0"
+VERSION="0.1.0-alpha"
 ERRORS=0
 
 check_command() {
@@ -12,6 +12,30 @@ check_command() {
         printf "✓ %s (%s)\n" "$cmd" "$desc"
     else
         printf "✗ %s missing — %s\n" "$cmd" "$desc"
+        printf "  Install: %s\n" "$install_hint"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
+check_yq_version() {
+    local desc="$1" install_hint="$2"
+    if ! command -v yq >/dev/null 2>&1; then
+        printf "✗ yq missing — %s\n" "$desc"
+        printf "  Install: %s\n" "$install_hint"
+        ERRORS=$((ERRORS + 1))
+        return
+    fi
+    
+    local version_output
+    version_output=$(yq --version 2>&1)
+    
+    # Check for v4+ by looking for "v4", "v5", etc. in version output
+    if echo "$version_output" | grep -q "v[4-9]"; then
+        printf "✓ yq (%s)\n" "$desc"
+    else
+        printf "✗ yq wrong version — %s\n" "$desc"
+        printf "  Found: %s\n" "$version_output"
+        printf "  Need: yq v4+ (supports 'yq eval -o=json' syntax)\n"
         printf "  Install: %s\n" "$install_hint"
         ERRORS=$((ERRORS + 1))
     fi
@@ -29,10 +53,10 @@ if [[ ${1:-} != "--runtime-only" ]]; then
     check_command "bats" "Test framework" "npm install -g bats / brew install bats-core"
 fi
 
-# Future dependencies (commented for now)
-# check_command "yq" "YAML processor" "brew install yq / snap install yq"
-# check_command "jq" "JSON processor" "apt install jq / brew install jq"
-# check_command "awesome-client" "AwesomeWM client" "apt install awesome"
+# Phase 1 runtime dependencies
+check_yq_version "YAML processor v4+" "sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq"
+check_command "jq" "JSON processor" "apt install jq / pacman -S jq"
+check_command "awesome-client" "AwesomeWM client" "apt install awesome / pacman -S awesome"
 
 echo
 if [[ $ERRORS -eq 0 ]]; then

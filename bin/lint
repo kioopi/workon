@@ -3,7 +3,7 @@ set -euo pipefail
 
 # lint — centralized shellcheck runner for WorkOn project
 
-VERSION="0.0.0"
+VERSION="0.1.0-alpha"
 
 # Definitive list of shell scripts to check
 SHELL_SCRIPTS=(

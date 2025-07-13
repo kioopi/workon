@@ -9,7 +9,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck bats
+          sudo apt-get install -y shellcheck bats jq awesome
+          # Install yq v4 from GitHub releases (Ubuntu apt has v3)
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
       - name: Check dependencies
         run: ./bin/check-deps
       - name: Run shellcheck

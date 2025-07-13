@@ -3,13 +3,13 @@
 @test "workon --version exits 0" {
     run ./bin/workon --version
     [ "$status" -eq 0 ]
-    [[ "$output" =~ workon\ 0\.0\.0 ]]
+    [[ "$output" =~ workon\ 0\.1\.0-alpha ]]
 }
 
 @test "workon --help exits 0" {
     run ./bin/workon --help
     [ "$status" -eq 0 ]
-    [[ "$output" =~ "no features yet" ]]
+    [[ "$output" =~ "Usage:" ]]
 }
 
 @test "check-deps script exists and is executable" {
