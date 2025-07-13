@@ -75,17 +75,23 @@ Exit codes:
    manifest_json=$(yq eval -o=json '.' "$manifest") || die "yq failed"
    resources=$(jq -r '.resources | to_entries[] | @base64' <<<"$manifest_json")
    ```
-3. **Environment substitution** *Accept only **``** patterns.*
+3. **Environment substitution** *Accept only **`{{VAR}}`** patterns.*
    ```bash
-   render() { printf '%s' "$1" | sed -E 's/\{\{([A-Z0-9_]+)\}\}/${\1}/g' | envsubst; }
+   render() { 
+       local input="$1"
+       # Convert {{VAR}} to ${VAR} format, allowing alphanumeric and underscore
+       printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/${\1}/g' | envsubst
+   }
    ```
 4. **Spawn each resource** (current tag)
    ```bash
    while read -r entry; do
-       name=$(jq -r 'fromjson.key' <<<"$entry")
-       raw=$(jq -r 'fromjson.value' <<<"$entry")
+       name=$(printf '%s' "$entry" | base64 -d | jq -r '.key')
+       raw=$(printf '%s' "$entry" | base64 -d | jq -r '.value') 
        cmd=$(render "$raw")
-       awesome-client "awful.spawn(\"pls-open $cmd\")" &
+       # Properly escape command for awesome-client
+       escaped_cmd=$(printf '%s' "pls-open $cmd" | sed 's/"/\\"/g')
+       awesome-client "awful.spawn(\"$escaped_cmd\")" &
    done <<<"$resources"
    wait  # ensure script exits only after all awful.spawn queued
    ```
@@ -146,6 +152,8 @@ Place a dummy README.md next to it so the resource resolves.
 | yq v3 installed         | `unknown flag: -o`                  | `sudo snap remove yq`; reinstall v4 binary.          |
 | env var not substituted | `web: "{{URL}}"` opens literally    | Export URL before running; or document `.env`.       |
 | Awesome not running     | `awesome-client: unable to connect` | Run inside login Awesome session; for CI use Xephyr. |
+| Invalid YAML structure  | `jq: error parsing`                  | Validate YAML has `resources:` key; check syntax.    |
+| Command escaping issues | Spawn failures with special chars   | Use proper shell quoting in awesome-client calls.    |
 
 ---
 

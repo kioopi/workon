@@ -1,15 +1,155 @@
 #!/usr/bin/env bash
 set -euo pipefail
+IFS=$'\n\t'
 
-VERSION="0.0.0"
+VERSION="0.1.0-alpha"
 
-case ${1:-} in
-  --version|-v)
-        echo "workon $VERSION"; exit 0;;
-  --help|-h|*)
-        cat <<EOF
-workon — no features yet (Phase 0)
-Usage: workon [--version] [--help]
+# Print error message and exit
+die() {
+    printf 'workon: %s\n' "$*" >&2
+    exit 2
+}
+
+# Print usage information
+usage() {
+    cat <<EOF
+workon — one-shot project workspace bootstrapper
+
+Usage: workon [OPTIONS] [PROJECT_PATH]
+
+Options:
+  -v, --version     Show version information
+  -h, --help        Show this help
+
+Arguments:
+  PROJECT_PATH      Directory containing workon.yaml (default: current directory)
+
+Examples:
+  workon                    # Start workspace from current directory
+  workon ~/my-project       # Start workspace from specific directory
 EOF
-        exit 0;;
-esac
+}
+
+# Find workon.yaml by walking up directory tree
+find_manifest() {
+    local dir
+    dir=$(realpath "${1:-$PWD}")
+    
+    while [[ $dir != / ]]; do
+        if [[ -f $dir/workon.yaml ]]; then
+            printf '%s/workon.yaml' "$dir"
+            return 0
+        fi
+        dir=$(dirname "$dir")
+    done
+    
+    return 1
+}
+
+# Expand {{VAR}} templates using environment variables
+render_template() {
+    local input="$1"
+    printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/${\1}/g' | envsubst
+}
+
+# Main workon function
+workon_start() {
+    local project_path="${1:-$PWD}"
+    local manifest
+    
+    # Find manifest file
+    if ! manifest=$(find_manifest "$project_path"); then
+        die "No workon.yaml found in $project_path or parent directories"
+    fi
+    
+    printf 'Found manifest: %s\n' "$manifest" >&2
+    
+    # Parse YAML to JSON
+    local manifest_json
+    if ! manifest_json=$(yq eval -o=json '.' "$manifest" 2>/dev/null); then
+        die "Failed to parse $manifest (check YAML syntax)"
+    fi
+    
+    # Validate structure
+    if ! jq -e '.resources' <<<"$manifest_json" >/dev/null 2>&1; then
+        die "Invalid manifest: missing 'resources' section"
+    fi
+    
+    # Check if resources is empty
+    local resource_count
+    resource_count=$(jq -r '.resources | length' <<<"$manifest_json" 2>/dev/null)
+    if [[ "$resource_count" == "0" ]] || [[ "$resource_count" == "null" ]]; then
+        die "No resources defined in manifest"
+    fi
+    
+    # Extract resources
+    local resources
+    if ! resources=$(jq -r '.resources | to_entries[] | @base64' <<<"$manifest_json" 2>/dev/null); then
+        die "Failed to extract resources from manifest"
+    fi
+    
+    # Change to manifest directory for relative paths
+    local manifest_dir
+    manifest_dir=$(dirname "$manifest")
+    cd "$manifest_dir" || die "Cannot change to manifest directory: $manifest_dir"
+    
+    # Spawn each resource
+    local count=0
+    printf 'Starting resources:\n' >&2
+    
+    while read -r entry; do
+        if [[ -z $entry ]]; then
+            continue
+        fi
+        
+        local name raw_cmd rendered_cmd escaped_cmd
+        name=$(printf '%s' "$entry" | base64 -d | jq -r '.key' 2>/dev/null) || continue
+        raw_cmd=$(printf '%s' "$entry" | base64 -d | jq -r '.value' 2>/dev/null) || continue
+        
+        # Render template variables
+        rendered_cmd=$(render_template "$raw_cmd")
+        
+        # Escape for awesome-client
+        escaped_cmd=$(printf '%s' "pls-open $rendered_cmd" | sed 's/"/\\"/g; s/\\/\\\\/g')
+        
+        printf '  %s: %s\n' "$name" "$rendered_cmd" >&2
+        
+        # Spawn via awesome-client
+        if ! awesome-client "awful.spawn(\"$escaped_cmd\")" >/dev/null 2>&1 &
+        then
+            printf 'Warning: Failed to spawn %s\n' "$name" >&2
+        else
+            count=$((count + 1))
+        fi
+        
+    done <<<"$resources"
+    
+    # Wait for all background processes
+    wait
+    
+    printf 'Started %d resources\n' "$count" >&2
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -v|--version)
+            printf 'workon %s\n' "$VERSION"
+            exit 0
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            die "Unknown option: $1"
+            ;;
+        *)
+            # This is the project path
+            break
+            ;;
+    esac
+done
+
+# Run main function
+workon_start "$@"
