@@ -67,7 +67,9 @@ test_render_template() {
         set -euo pipefail
         render_template() {
             local input=\"\$1\"
-            printf '%s' \"\$input\" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/\${\1}/g' | envsubst
+            local converted
+            converted=\$(printf '%s' \"\$input\" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}\}/\${\1\2}/g')
+            (set +u; eval \"printf '%s' \\\"\$converted\\\"\")
         }
         render_template '$input'
     "
@@ -94,6 +96,39 @@ test_render_template() {
     run test_render_template "Hello {{UNDEFINED_VAR}}"
     [ "$status" -eq 0 ]
     [[ "$output" == "Hello " ]]
+}
+
+@test "render_template: default value when variable undefined" {
+    unset DEFAULT_TEST_VAR || true
+    
+    run test_render_template "Hello {{DEFAULT_TEST_VAR:-world}}"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "Hello world" ]]
+}
+
+@test "render_template: variable overrides default value" {
+    export DEFAULT_TEST_VAR="custom"
+    
+    run test_render_template "Hello {{DEFAULT_TEST_VAR:-world}}"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "Hello custom" ]]
+}
+
+@test "render_template: complex default values" {
+    unset URL_VAR || true
+    
+    run test_render_template "URL: {{URL_VAR:-https://example.com/path?param=value}}"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "URL: https://example.com/path?param=value" ]]
+}
+
+@test "render_template: mixed variables with and without defaults" {
+    export DEFINED_VAR="defined"
+    unset UNDEFINED_VAR || true
+    
+    run test_render_template "{{DEFINED_VAR}} and {{UNDEFINED_VAR:-default}} and {{PLAIN_VAR}}"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "defined and default and " ]]
 }
 
 @test "workon --version shows correct version" {

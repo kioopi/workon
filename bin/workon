@@ -46,10 +46,14 @@ find_manifest() {
     return 1
 }
 
-# Expand {{VAR}} templates using environment variables
+# Expand {{VAR}} and {{VAR:-default}} templates using environment variables
 render_template() {
     local input="$1"
-    printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/${\1}/g' | envsubst
+    # Convert {{VAR}} and {{VAR:-default}} to ${VAR} and ${VAR:-default} format
+    local converted
+    converted=$(printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}\}/${\1\2}/g')
+    # Use bash parameter expansion (temporarily disable -u for undefined vars)
+    (set +u; eval "printf '%s' \"$converted\"")
 }
 
 # Main workon function

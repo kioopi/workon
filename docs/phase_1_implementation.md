@@ -31,8 +31,8 @@ workon/               # project repo
 
 | Tool                | Why we need it                                         | Install                                                              | Docs                                                                           |
 | ------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **yq v4**           | YAML → JSON conversion (`yq eval -o=json`)             | `sudo apt install yq`                                                | [https://mikefarah.gitbook.io/yq/](https://mikefarah.gitbook.io/yq/)           |
-| **envsubst**        | Variable substitution `{{VAR}}` → `$VAR`               | `sudo apt install gettext-base`                                      | [https://www.gnu.org/software/gettext/](https://www.gnu.org/software/gettext/) |
+| **yq v4**           | YAML → JSON conversion (`yq eval -o=json`)             | mikefarah's yq v4+: see https://github.com/mikefarah/yq#install                                                | [https://mikefarah.gitbook.io/yq/](https://mikefarah.gitbook.io/yq/)           |
+| **bash**            | Parameter expansion for `{{VAR:-default}}` syntax      | Built-in with bash 4.0+                                              | [https://www.gnu.org/software/bash/](https://www.gnu.org/software/bash/) |
 | **awesome-client**  | Remote control of AwesomeWM (`awesome-client '<lua>'`) | part of `awesome` pkg                                                | [https://awesomewm.org/](https://awesomewm.org/)                               |
 | **pls-open**   | Launch shim honoring `Terminal=true`                   | our script                                                           | see repo                                                                       |
 | **ShellCheck**      | Lint bash in CI                                        | `apt install shellcheck`                                             | [https://www.shellcheck.net/](https://www.shellcheck.net/)                     |
@@ -75,12 +75,15 @@ Exit codes:
    manifest_json=$(yq eval -o=json '.' "$manifest") || die "yq failed"
    resources=$(jq -r '.resources | to_entries[] | @base64' <<<"$manifest_json")
    ```
-3. **Environment substitution** *Accept only **`{{VAR}}`** patterns.*
+3. **Environment substitution** *Supports **`{{VAR}}`** and **`{{VAR:-default}}`** patterns.*
    ```bash
-   render() { 
+   render_template() { 
        local input="$1"
-       # Convert {{VAR}} to ${VAR} format, allowing alphanumeric and underscore
-       printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/${\1}/g' | envsubst
+       # Convert {{VAR}} and {{VAR:-default}} to ${VAR} and ${VAR:-default} format
+       local converted
+       converted=$(printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}\}/${\1\2}/g')
+       # Use bash parameter expansion for defaults
+       (set +u; eval "printf '%s' \"$converted\"")
    }
    ```
 4. **Spawn each resource** (current tag)

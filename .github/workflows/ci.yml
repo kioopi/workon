@@ -9,7 +9,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck bats awesome
+          sudo apt-get install -y shellcheck bats yq jq awesome
       - name: Check dependencies
         run: ./bin/check-deps
       - name: Run shellcheck

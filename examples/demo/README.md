@@ -26,3 +26,5 @@ You can set `DEMO_URL` to override the default web resource:
 export DEMO_URL="https://github.com"
 ../../bin/workon
 ```
+
+If `DEMO_URL` is not set, it defaults to https://example.com.
