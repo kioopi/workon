@@ -31,7 +31,7 @@ workon/               # project repo
 
 | Tool                | Why we need it                                         | Install                                                              | Docs                                                                           |
 | ------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **yq v4**           | YAML → JSON conversion (`yq eval -o=json`)             | mikefarah's yq v4+: see https://github.com/mikefarah/yq#install                                                | [https://mikefarah.gitbook.io/yq/](https://mikefarah.gitbook.io/yq/)           |
+| **yq v4**           | YAML → JSON conversion (`yq eval -o=json`)             | `sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq`                                                | [https://mikefarah.gitbook.io/yq/](https://mikefarah.gitbook.io/yq/)           |
 | **bash**            | Parameter expansion for `{{VAR:-default}}` syntax      | Built-in with bash 4.0+                                              | [https://www.gnu.org/software/bash/](https://www.gnu.org/software/bash/) |
 | **awesome-client**  | Remote control of AwesomeWM (`awesome-client '<lua>'`) | part of `awesome` pkg                                                | [https://awesomewm.org/](https://awesomewm.org/)                               |
 | **pls-open**   | Launch shim honoring `Terminal=true`                   | our script                                                           | see repo                                                                       |
@@ -152,7 +152,7 @@ Place a dummy README.md next to it so the resource resolves.
 
 | Problem                 | Symptom                             | Fix                                                  |
 | ----------------------- | ----------------------------------- | ---------------------------------------------------- |
-| yq v3 installed         | `unknown flag: -o`                  | `sudo snap remove yq`; reinstall v4 binary.          |
+| yq v3 installed         | `unknown flag: -o`                  | Ubuntu apt has v3; install v4 from GitHub releases.  |
 | env var not substituted | `web: "{{URL}}"` opens literally    | Export URL before running; or document `.env`.       |
 | Awesome not running     | `awesome-client: unable to connect` | Run inside login Awesome session; for CI use Xephyr. |
 | Invalid YAML structure  | `jq: error parsing`                  | Validate YAML has `resources:` key; check syntax.    |

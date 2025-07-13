@@ -54,7 +54,7 @@ if [[ ${1:-} != "--runtime-only" ]]; then
 fi
 
 # Phase 1 runtime dependencies
-check_yq_version "YAML processor v4+" "wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq && chmod +x /usr/local/bin/yq"
+check_yq_version "YAML processor v4+" "sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq"
 check_command "jq" "JSON processor" "apt install jq / pacman -S jq"
 check_command "awesome-client" "AwesomeWM client" "apt install awesome / pacman -S awesome"
 
