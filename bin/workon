@@ -4,11 +4,13 @@ IFS=$'\n\t'
 
 VERSION="0.1.0-alpha"
 
-# Get the directory containing this script
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_REALPATH="$(realpath "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_REALPATH")"
+WORKON_DIR="$(dirname "$SCRIPT_DIR")"
+
 # Source the library functions
 # shellcheck source=lib/workon.sh disable=SC1091
-source "$SCRIPT_DIR/../lib/workon.sh"
+source "$WORKON_DIR/lib/workon.sh"
 
 # Print usage information
 usage() {
