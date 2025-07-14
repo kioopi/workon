@@ -101,44 +101,44 @@ done
 first_arg="$1"
 shift || true  # leave $@ intact if there were no more params
 
-# Case 1: explicit .desktop path
-if [[ -f $first_arg && $first_arg == *.desktop ]]; then
-    desktop_file="$first_arg"
-    desktop_id="${first_arg##*/}"
-    desktop_id="${desktop_id%.desktop}"
-    target_file="${1:-}"
-
-# Case 2: single argument that looks like a file or URL → delegate
-elif [[ $# -eq 0 && ( $first_arg == *://* || -e $first_arg || $first_arg == */* ) ]]; then
+# single argument that looks like a file or URL → delegate
+if [[ $# -eq 0 && ( $first_arg == *://* || -e $first_arg || $first_arg == */* ) ]]; then
     if "$DRY_RUN"; then
         printf '%q ' xdg-open "$first_arg"
         printf '\n'
         exit 0
     fi
-    if "$KEEP_OPEN"; then
-        printf 'Note: --keep-open ignored when delegating to xdg-open\n' >&2
-    fi
-    exec xdg-open "$first_arg"
 
-# Otherwise treat first_arg as a desktop‑id
+    cmd="xdg-open $first_arg"
+    needs_terminal="true"
+
 else
-    desktop_id="$first_arg"
+    # explicit .desktop path
+    if [[ -f $first_arg && $first_arg == *.desktop ]]; then
+        desktop_file="$first_arg"
+        desktop_id="${first_arg##*/}"
+        desktop_id="${desktop_id%.desktop}"
+    else
+      # Otherwise treat first_arg as a desktop‑id
+      desktop_id="$first_arg"
+      desktop_file="$(resolve_desktop_file "$desktop_id")"
+    fi
+
+
     target_file="${1:-}"
-    desktop_file="$(resolve_desktop_file "$desktop_id")"
-fi
 
-# ---------- collect Exec line & Terminal flag -------------------------------
-exec_line="$(get_value Exec "$desktop_file")"
-[[ -z $exec_line ]] && die "No Exec entry in $desktop_file"
+    exec_line="$(get_value Exec "$desktop_file")"
+    [[ -z $exec_line ]] && die "No Exec entry in $desktop_file"
 
-needs_terminal="$(get_value Terminal "$desktop_file" | tr '[:upper:]' '[:lower:]')"
+    needs_terminal="$(get_value Terminal "$desktop_file" | tr '[:upper:]' '[:lower:]')"
 
-cmd="$(substitute_placeholders "$exec_line" "$target_file" "$desktop_id" "$desktop_file")"
+    cmd="$(substitute_placeholders "$exec_line" "$target_file" "$desktop_id" "$desktop_file")"
 
-# ---------- handle flags that depend on desktop entry ------------------------
-if [[ $needs_terminal != "true" && $KEEP_OPEN == true ]]; then
-    printf 'Note: --keep-open ignored because Terminal=false in %s\n' "$desktop_file" >&2
-    KEEP_OPEN=false
+    # ---------- handle flags that depend on desktop entry ------------------------
+    if [[ $needs_terminal != "true" && $KEEP_OPEN == true ]]; then
+        printf 'Note: --keep-open ignored because Terminal=false in %s\n' "$desktop_file" >&2
+        KEEP_OPEN=false
+    fi
 fi
 
 # ---------- build the final command array -----------------------------------
