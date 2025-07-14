@@ -44,9 +44,9 @@ launch_resource() {
     escaped_cmd=$(printf '%s' "pls-open $command" | sed 's/"/\\"/g; s/\\/\\\\/g')
     
     printf '  %s: %s\n' "$name" "$command" >&2
-    
+
     # Spawn via awesome-client
-    awesome-client "awful.spawn(\"$escaped_cmd\")" >/dev/null 2>&1 &
+    awesome-client "require(\"awful.spawn\").spawn(\"$escaped_cmd\")" >/dev/null 2>&1 &
     local spawn_pid=$!
     
     # Give the process a moment to start
