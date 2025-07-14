@@ -10,7 +10,7 @@
 | -------------- | ------------------------------------------ |
 | **✅ Done**     | Feature is implemented on *main*           |
 | **🚧 WIP**     | Feature under active development (open PR) |
-| **🔜 Next**    | Immediately upcoming after current WIP     |
+| **✅ Next**    | Immediately upcoming after current WIP     |
 | **🗓 Planned** | Future milestone, no work yet              |
 | **⚠️ Gotcha**  | Edge‑case or risk to watch                 |
 
@@ -18,8 +18,10 @@
 
 ## Milestones
 
-### Phase 0 — Bootstrap   `(tag: v0.0)`  🔜 
+### Phase 0 — Bootstrap   `(tag: v0.0)`  ✅ 
 
+
+**✅ COMPLETED** (commit c0e92e3) — All infrastructure tasks finished.
 | Task                                  | Notes / Resources                                              |
 | ------------------------------------- | -------------------------------------------------------------- |
 | Initialise Git repo, `bin/`, `README` | `git init`, add MIT LICENSE.                                   |
@@ -27,9 +29,18 @@
 | Continuous Shell‑lint                 | Add GitHub Action using ShellCheck.                            |
 | Dir structure                         | `bin/` for CLI, `docs/`, `examples/`, `.github/`.              |
 
-### Phase 1 — **Minimal Start‑only**   `(tag: v0.1‑alpha)` 🚧
+### Phase 1 — **Minimal Start‑only**   `(tag: v0.1.0-alpha)` ✅
 
+
+**✅ COMPLETED** (commit 05e9e63, v0.1.0-alpha) — Full start-only functionality with comprehensive testing.
+
+**Additional work completed:**
+- Comprehensive test suite (20+ tests in `test/unit/phase1.bats`)
+- Centralized linting with `bin/lint` script for consistent shellcheck execution
+- Functional demo project in `examples/demo/` with working `workon.yaml`
+- Enhanced error handling and user feedback
 | Task                                   | Implementation hints                                        | Gotchas                               |
+
 | -------------------------------------- | ----------------------------------------------------------- | ------------------------------------- |
 | **Locate** `workon.yaml` (walk upward) | `while [[ $d != / ]]; do … done`                            | Symlinks / bind‑mounts.               |
 | **Parse** YAML → JSON                  | [`yq eval -o=json`](https://mikefarah.gitbook.io/yq/)       | Require yq v4; flags differ in v3.    |

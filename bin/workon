@@ -4,18 +4,22 @@ IFS=$'\n\t'
 
 VERSION="0.1.0-alpha"
 
-# Print error message and exit
-die() {
-    printf 'workon: %s\n' "$*" >&2
-    exit 2
-}
+# Get the directory containing this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source the library functions
+# shellcheck source=lib/workon.sh disable=SC1091
+source "$SCRIPT_DIR/../lib/workon.sh"
 
 # Print usage information
 usage() {
     cat <<EOF
 workon — one-shot project workspace bootstrapper
 
-Usage: workon [OPTIONS] [PROJECT_PATH]
+Usage: workon [COMMAND] [OPTIONS] [PROJECT_PATH]
+
+Commands:
+  start             Start workspace (default command)
+  stop              Stop workspace (coming in Phase 2)
 
 Options:
   -v, --version     Show version information
@@ -26,40 +30,17 @@ Arguments:
 
 Examples:
   workon                    # Start workspace from current directory
-  workon ~/my-project       # Start workspace from specific directory
+  workon start ~/my-project # Start workspace from specific directory
 EOF
 }
 
-# Find workon.yaml by walking up directory tree
-find_manifest() {
-    local dir
-    dir=$(realpath "${1:-$PWD}")
-    
-    while [[ $dir != / ]]; do
-        if [[ -f $dir/workon.yaml ]]; then
-            printf '%s/workon.yaml' "$dir"
-            return 0
-        fi
-        dir=$(dirname "$dir")
-    done
-    
-    return 1
-}
-
-# Expand {{VAR}} and {{VAR:-default}} templates using environment variables
-render_template() {
-    local input="$1"
-    # Convert {{VAR}} and {{VAR:-default}} to ${VAR} and ${VAR:-default} format
-    local converted
-    converted=$(printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}\}/${\1\2}/g')
-    # Use bash parameter expansion (temporarily disable -u for undefined vars)
-    (set +u; eval "printf '%s' \"$converted\"")
-}
-
-# Main workon function
+# Main workon start function
 workon_start() {
     local project_path="${1:-$PWD}"
     local manifest
+    
+    # Check dependencies
+    check_dependencies
     
     # Find manifest file
     if ! manifest=$(find_manifest "$project_path"); then
@@ -68,29 +49,13 @@ workon_start() {
     
     printf 'Found manifest: %s\n' "$manifest" >&2
     
-    # Parse YAML to JSON
+    # Parse and validate manifest
     local manifest_json
-    if ! manifest_json=$(yq eval -o=json '.' "$manifest" 2>/dev/null); then
-        die "Failed to parse $manifest (check YAML syntax)"
-    fi
-    
-    # Validate structure
-    if ! jq -e '.resources' <<<"$manifest_json" >/dev/null 2>&1; then
-        die "Invalid manifest: missing 'resources' section"
-    fi
-    
-    # Check if resources is empty
-    local resource_count
-    resource_count=$(jq -r '.resources | length' <<<"$manifest_json" 2>/dev/null)
-    if [[ "$resource_count" == "0" ]] || [[ "$resource_count" == "null" ]]; then
-        die "No resources defined in manifest"
-    fi
+    manifest_json=$(parse_manifest "$manifest")
     
     # Extract resources
     local resources
-    if ! resources=$(jq -r '.resources | to_entries[] | @base64' <<<"$manifest_json" 2>/dev/null); then
-        die "Failed to extract resources from manifest"
-    fi
+    resources=$(extract_resources "$manifest_json")
     
     # Change to manifest directory for relative paths
     local manifest_dir
@@ -106,23 +71,15 @@ workon_start() {
             continue
         fi
         
-        local name raw_cmd rendered_cmd escaped_cmd
+        local name raw_cmd rendered_cmd
         name=$(printf '%s' "$entry" | base64 -d | jq -r '.key' 2>/dev/null) || continue
         raw_cmd=$(printf '%s' "$entry" | base64 -d | jq -r '.value' 2>/dev/null) || continue
         
         # Render template variables
         rendered_cmd=$(render_template "$raw_cmd")
         
-        # Escape for awesome-client
-        escaped_cmd=$(printf '%s' "pls-open $rendered_cmd" | sed 's/"/\\"/g; s/\\/\\\\/g')
-        
-        printf '  %s: %s\n' "$name" "$rendered_cmd" >&2
-        
-        # Spawn via awesome-client
-        if ! awesome-client "awful.spawn(\"$escaped_cmd\")" >/dev/null 2>&1 &
-        then
-            printf 'Warning: Failed to spawn %s\n' "$name" >&2
-        else
+        # Launch resource
+        if launch_resource "$name" "$rendered_cmd"; then
             count=$((count + 1))
         fi
         
@@ -134,7 +91,13 @@ workon_start() {
     printf 'Started %d resources\n' "$count" >&2
 }
 
+# Placeholder for stop functionality (Phase 2)
+workon_stop() {
+    die "Stop functionality not yet implemented (coming in Phase 2)"
+}
+
 # Parse command line arguments
+command=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -v|--version)
@@ -144,6 +107,10 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             exit 0
+            ;;
+        start|stop)
+            command="$1"
+            shift
             ;;
         -*)
             die "Unknown option: $1"
@@ -155,5 +122,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Run main function
-workon_start "$@"
+# Default to start command if none specified
+if [[ -z $command ]]; then
+    command="start"
+fi
+
+# Execute the appropriate command
+case "$command" in
+    start)
+        workon_start "$@"
+        ;;
+    stop)
+        workon_stop "$@"
+        ;;
+    *)
+        die "Unknown command: $command"
+        ;;
+esac
