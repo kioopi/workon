@@ -26,7 +26,7 @@ teardown() {
     create_minimal_manifest
     
     # Act
-    run test_find_manifest "$PWD"
+    run find_manifest "$PWD"
     
     # Assert
     assert_success
@@ -40,7 +40,7 @@ teardown() {
     cd subdir
     
     # Act
-    run test_find_manifest "$PWD"
+    run find_manifest "$PWD"
     
     # Assert
     assert_success
@@ -49,7 +49,7 @@ teardown() {
 
 @test "find_manifest: fails when no workon.yaml exists" {
     # Act
-    run test_find_manifest "$PWD"
+    run find_manifest "$PWD"
     
     # Assert
     assert_failure
@@ -61,11 +61,20 @@ teardown() {
     export TEST_VAR="test_value"
     
     # Act
-    run test_render_template "Hello {{TEST_VAR}}"
+    run render_template "Hello {{TEST_VAR}}"
     
     # Assert
     assert_success
     assert_output "Hello test_value"
+}
+
+@test "render_template: leaves templates without variables unchanged" {
+    # Act
+    run render_template "Just a plain string"
+    
+    # Assert
+    assert_success
+    assert_output "Just a plain string"
 }
 
 @test "render_template: handles multiple variables in single template" {
@@ -74,7 +83,7 @@ teardown() {
     export VAR2="second"
     
     # Act
-    run test_render_template "{{VAR1}} and {{VAR2}}"
+    run render_template "{{VAR1}} and {{VAR2}}"
     
     # Assert
     assert_success
@@ -86,7 +95,7 @@ teardown() {
     unset UNDEFINED_VAR || true
     
     # Act
-    run test_render_template "Hello {{UNDEFINED_VAR}}"
+    run render_template "Hello {{UNDEFINED_VAR}}"
     
     # Assert
     assert_success
@@ -98,7 +107,7 @@ teardown() {
     unset DEFAULT_TEST_VAR || true
     
     # Act
-    run test_render_template "Hello {{DEFAULT_TEST_VAR:-world}}"
+    run render_template "Hello {{DEFAULT_TEST_VAR:-world}}"
     
     # Assert
     assert_success
@@ -110,7 +119,7 @@ teardown() {
     export DEFAULT_TEST_VAR="custom"
     
     # Act
-    run test_render_template "Hello {{DEFAULT_TEST_VAR:-world}}"
+    run render_template "Hello {{DEFAULT_TEST_VAR:-world}}"
     
     # Assert
     assert_success
@@ -122,7 +131,7 @@ teardown() {
     unset URL_VAR || true
     
     # Act
-    run test_render_template "URL: {{URL_VAR:-https://example.com/path?param=value}}"
+    run render_template "URL: {{URL_VAR:-https://example.com/path?param=value}}"
     
     # Assert
     assert_success
@@ -136,11 +145,20 @@ teardown() {
     unset PLAIN_VAR || true
     
     # Act
-    run test_render_template "{{DEFINED_VAR}} and {{UNDEFINED_VAR:-default}} and {{PLAIN_VAR}}"
+    run render_template "{{DEFINED_VAR}} and {{UNDEFINED_VAR:-default}} and {{PLAIN_VAR}}"
     
     # Assert
     assert_success
     assert_output "defined and default and "
+}
+
+@test "render_template: leave imput unchanged if no variables" {
+    # Act
+    run render_template "nvim ."
+    
+    # Assert
+    assert_success
+    assert_output "nvim ."
 }
 
 @test "workon --version: displays current version information" {
@@ -149,7 +167,7 @@ teardown() {
     
     # Assert
     assert_success
-    assert_output --partial "workon 0.1.0-alpha"
+    assert_output "workon 0.1.0-alpha"
 }
 
 @test "workon --help: displays usage information and options" {

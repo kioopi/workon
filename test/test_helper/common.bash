@@ -3,43 +3,9 @@
 # Project root directory
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-# Helper function to test find_manifest functionality
-test_find_manifest() {
-    local search_dir="$1"
-    bash -c "
-        set -euo pipefail
-        find_manifest() {
-            local dir
-            dir=\$(realpath \"\${1:-\$PWD}\")
-            
-            while [[ \$dir != / ]]; do
-                if [[ -f \$dir/workon.yaml ]]; then
-                    printf '%s/workon.yaml' \"\$dir\"
-                    return 0
-                fi
-                dir=\$(dirname \"\$dir\")
-            done
-            
-            return 1
-        }
-        find_manifest '$search_dir'
-    "
-}
+# Source the real workon library functions
+source "$PROJECT_ROOT/lib/workon.sh"
 
-# Helper function to test render_template functionality
-test_render_template() {
-    local input="$1"
-    bash -c "
-        set -euo pipefail
-        render_template() {
-            local input=\"\$1\"
-            local converted
-            converted=\$(printf '%s' \"\$input\" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}\}/\${\1\2}/g')
-            (set +u; eval \"printf '%s' \\\"\$converted\\\"\")
-        }
-        render_template '$input'
-    "
-}
 
 # Helper function to create a minimal valid workon.yaml
 create_minimal_manifest() {

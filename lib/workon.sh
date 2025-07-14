@@ -29,7 +29,7 @@ render_template() {
     local input="$1"
     # Convert {{VAR}} and {{VAR:-default}} to ${VAR} and ${VAR:-default} format
     local converted
-    converted=$(printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?)\}\}/${\1\2}/g')
+    converted=$(printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}\}/${\1\2}/g')
     # Use bash parameter expansion (temporarily disable -u for undefined vars)
     (set +u; eval "printf '%s' \"$converted\"")
 }
