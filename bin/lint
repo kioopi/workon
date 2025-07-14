@@ -11,6 +11,7 @@ SHELL_SCRIPTS=(
     "bin/check-deps"
     "bin/lint"
     "bin/pls-open"
+    "bin/write_session_entry"
     "lib/workon.sh"
 )
 

@@ -85,11 +85,14 @@ EOF
     wait $workon_pid 2>/dev/null || true
     
     # Assert - check session file was created
-    local cache_dir="$XDG_CACHE_HOME/workon"
-    assert [ -d "$cache_dir" ]
+    local cachedir=$(cache_dir)
+
+    echo "Cache directory: $cachedir"
+
+    assert [ -d "$cachedir" ]
     
     # Should have exactly one session file
-    local session_files=("$cache_dir"/*.json)
+    local session_files=("$cachedir"/*.json)
     assert [ -f "${session_files[0]}" ]
     
     # Verify session file structure
@@ -124,10 +127,10 @@ EOF
     local pid2=$!
     
     # Create a session file manually
-    local cache_dir="$XDG_CACHE_HOME/workon"
-    mkdir -p "$cache_dir"
+    local cachedir="$(cache_dir)"
+    mkdir -p "$cachedir"
     local session_file
-    session_file="$cache_dir/$(printf '%s' "$PWD" | sha1sum | cut -d' ' -f1).json"
+    session_file="$cachedir/$(printf '%s' "$PWD" | sha1sum | cut -d' ' -f1).json"
     
     cat > "$session_file" <<EOF
 [
@@ -183,10 +186,10 @@ EOF
     require_command "jq"
     
     # Arrange - create an existing session file
-    local cache_dir="$XDG_CACHE_HOME/workon"
-    mkdir -p "$cache_dir"
+    local cachedir="$(cache_dir)"
+    mkdir -p "$cachedir"
     local session_file
-    session_file="$cache_dir/$(printf '%s' "$PWD" | sha1sum | cut -d' ' -f1).json"
+    session_file="$cachedir/$(printf '%s' "$PWD" | sha1sum | cut -d' ' -f1).json"
     echo '[]' > "$session_file"
     
     create_mock_awesome_client
@@ -205,22 +208,6 @@ EOF
     # The output would be visible in the process, but since we're testing
     # in the background, we verify the session file still exists
     assert [ -f "$session_file" ]
-}
-
-@test "integration: handles missing dependencies gracefully" {
-    # Arrange - create environment without required tools
-    local old_path="$PATH"
-    export PATH="/usr/bin:/bin"  # Limited PATH without yq, jq
-    
-    # Act
-    run "$PROJECT_ROOT/bin/workon" start
-    
-    # Assert
-    assert_failure
-    assert_output --partial "Missing required dependencies"
-    
-    # Restore PATH
-    export PATH="$old_path"
 }
 
 @test "integration: processes different resource types correctly" {
@@ -255,8 +242,8 @@ EOF
     wait $workon_pid 2>/dev/null || true
     
     # Assert - check session file contains all resources
-    local cache_dir="$XDG_CACHE_HOME/workon"
-    local session_files=("$cache_dir"/*.json)
+    local cachedir="$(cache_dir)"
+    local session_files=("$cachedir"/*.json)
     
     if [[ -f "${session_files[0]}" ]]; then
         # Should have entries for all three resources

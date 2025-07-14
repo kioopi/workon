@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_REALPATH="$(realpath "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_REALPATH")"
+WORKON_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Source the library functions
+# shellcheck source=lib/workon.sh disable=SC1091
+source "$WORKON_DIR/lib/workon.sh"
+
+echo "Writing session entry: $2 for $3 (PID: $4)" > /home/vt/tmp/session.log
+echo "Session file: $1" >> /home/vt/tmp/session.log
+
+# $1 is the session file path
+# $2 is the command that was executed
+# $3 is the name of the tool
+# $4 is the PID of the process
+
+write_session_entry "$1" "$2" "$3" "$4"

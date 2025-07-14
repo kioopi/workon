@@ -77,7 +77,7 @@ teardown() {
     assert_output "Just a plain string"
 }
 
-@test "render_template: handles multiple variables in single template" t:
+@test "render_template: handles multiple variables in single template" {
     # Arrange
     export VAR1="first"
     export VAR2="second"

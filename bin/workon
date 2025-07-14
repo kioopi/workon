@@ -67,8 +67,12 @@ workon_start() {
     cd "$manifest_dir" || die "Cannot change to manifest directory: $manifest_dir"
     
     # Initialize session tracking
+    mkdir -p "$(cache_dir)" || die "Cannot create cache directory"
     local session_file
     session_file=$(cache_file "$manifest_dir")
+
+    echo "Starting workspace in: $manifest_dir" >&2
+    echo "Session file: $session_file" >&2
     
     # Check if session already exists
     if [[ -f $session_file ]]; then

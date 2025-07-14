@@ -72,35 +72,60 @@ launch_resource_with_session() {
     escaped_cmd=$(printf '%s' "pls-open $command" | sed 's/"/\\"/g; s/\\/\\\\/g')
     
     printf '  %s: %s\n' "$name" "$command" >&2
+
+    awesome-client <<-LUA
+    local awful = require("awful")
+    awful.spawn("${escaped_cmd}", {
+      callback = function(c) 
+        os.execute("echo \"" .. c.pid .. "\" > /home/vt/tmp/pid.txt")
+        if c.pid then
+          os.execute("write_session_entry \"${session_file}\" \"${command}\" \"${name}\" \"" .. c.pid .. "\"")
+        end
+      end
+    })
+LUA
+    # TODO: Find a way to check if the command was successfully launched 
+
+    return 0
+}
+
+write_session_entry() {
+    local session_file="$1"
+    local cmd="$2"
+    local name="$3"
+    local pid="$4"
+
+    # Validate inputs
+    if [[ -z $session_file || -z $cmd || -z $name || -z $pid ]]; then
+        die "Invalid parameters for write_session_entry"
+    fi
+
+    # Create JSON entry
+    local json_entry
+    json_entry=$(session_entry "$cmd" "$name" "$pid")
     
-    # Spawn via awesome-client
-    awesome-client "awful.spawn(\"$escaped_cmd\")" >/dev/null 2>&1 &
-    local spawn_pid=$!
+    # Append to session file with locking
+    with_lock "$session_file" json_append "$session_file" "$json_entry"
+}
+
+
+session_entry() {
+    local cmd="$1"
+    local name="$2"
+    local pid="$3"
     
-    # Give the process a moment to start
-    sleep 0.1
-    
-    # Check if the process is still running
-    if ! kill -0 "$spawn_pid" 2>/dev/null; then
-        printf 'Warning: Failed to spawn %s\n' "$name" >&2
-        return 1
+    # Validate inputs
+    if [[ -z $cmd || -z $name || -z $pid ]]; then
+        die "Invalid session entry parameters"
     fi
     
-    # Create session entry
-    local timestamp
-    timestamp=$(date +%s)
-    local session_entry
-    session_entry=$(jq -n \
-        --arg cmd "pls-open $command" \
+    # Create JSON entry
+    jq -n \
+        --arg cmd "$cmd" \
         --arg name "$name" \
-        --argjson pid "$spawn_pid" \
-        --argjson timestamp "$timestamp" \
-        '{cmd: $cmd, name: $name, pid: $pid, timestamp: $timestamp}')
-    
-    # Record in session file with locking
-    with_lock "$session_file" json_append "$session_file" "$session_entry"
-    
-    return 0
+        --argjson pid "$pid" \
+        --argjson timestamp "$(date +%s)" \
+        '{cmd: $cmd, name: $name, pid: $pid, timestamp: $timestamp}'
 }
 
 # Parse and validate manifest JSON
@@ -159,7 +184,7 @@ with_lock() {
     shift
     local cache_dir_path
     cache_dir_path=$(dirname "$lock_file")
-    
+
     # Ensure cache directory exists
     mkdir -p "$cache_dir_path" || die "Cannot create cache directory: $cache_dir_path"
     
