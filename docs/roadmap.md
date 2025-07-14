@@ -1,6 +1,6 @@
-# WorkOn — Development Road‑Map
+# WorkOn — Development Road‑Map
 
-> **Purpose**  A living guide that shows where we are heading and in what order we will ship features.  Each phase produces a usable artifact; later phases layer new capability without refactors.  Keep this file under version control and update it when reality diverges.
+> **Purpose**  A living guide that shows where we are heading and in what order we will ship features.  Each phase produces a usable artifact; later phases layer new capability without refactors.  Keep this file under version control and update it when reality diverges.
 
 ---
 
@@ -8,28 +8,28 @@
 
 | Symbol         | Meaning                                    |
 | -------------- | ------------------------------------------ |
-| **✅ Done**     | Feature is implemented on *main*           |
-| **🚧 WIP**     | Feature under active development (open PR) |
-| **✅ Next**    | Immediately upcoming after current WIP     |
-| **🗓 Planned** | Future milestone, no work yet              |
-| **⚠️ Gotcha**  | Edge‑case or risk to watch                 |
+| **✅ Done**     | Feature is implemented on *main*           |
+| **🚧 WIP**     | Feature under active development (open PR) |
+| **⭐ Next**    | Immediately upcoming after current WIP     |
+| **🗓 Planned** | Future milestone, no work yet              |
+| **⚠️ Gotcha**  | Edge‑case or risk to watch                 |
 
 ---
 
 ## Milestones
 
-### Phase 0 — Bootstrap   `(tag: v0.0)`  ✅ 
+### Phase 0 — Bootstrap   `(tag: v0.0)`  ✅ 
 
 
 **✅ COMPLETED** (commit c0e92e3) — All infrastructure tasks finished.
 | Task                                  | Notes / Resources                                              |
 | ------------------------------------- | -------------------------------------------------------------- |
-| Initialise Git repo, `bin/`, `README` | `git init`, add MIT LICENSE.                                   |
+| Initialise Git repo, `bin/`, `README` | `git init`, add MIT LICENSE.                                   |
 | Vendor or symlink `` into `bin/`      | For now copy master script; later make it a system dependency. |
-| Continuous Shell‑lint                 | Add GitHub Action using ShellCheck.                            |
+| Continuous Shell‑lint                 | Add GitHub Action using ShellCheck.                            |
 | Dir structure                         | `bin/` for CLI, `docs/`, `examples/`, `.github/`.              |
 
-### Phase 1 — **Minimal Start‑only**   `(tag: v0.1.0-alpha)` ✅
+### Phase 1 — **Minimal Start‑only**   `(tag: v0.1.0-alpha)` ✅
 
 
 **✅ COMPLETED** (commit 05e9e63, v0.1.0-alpha) — Full start-only functionality with comprehensive testing.
@@ -39,62 +39,72 @@
 - Centralized linting with `bin/lint` script for consistent shellcheck execution
 - Functional demo project in `examples/demo/` with working `workon.yaml`
 - Enhanced error handling and user feedback
-| Task                                   | Implementation hints                                        | Gotchas                               |
 
+| Task                                   | Implementation hints                                        | Gotchas                               |
 | -------------------------------------- | ----------------------------------------------------------- | ------------------------------------- |
-| **Locate** `workon.yaml` (walk upward) | `while [[ $d != / ]]; do … done`                            | Symlinks / bind‑mounts.               |
-| **Parse** YAML → JSON                  | [`yq eval -o=json`](https://mikefarah.gitbook.io/yq/)       | Require yq v4; flags differ in v3.    |
+| **Locate** `workon.yaml` (walk upward) | `while [[ $d != / ]]; do … done`                            | Symlinks / bind‑mounts.               |
+| **Parse** YAML → JSON                  | [`yq eval -o=json`](https://mikefarah.gitbook.io/yq/)       | Require yq v4; flags differ in v3.    |
 | Expand `{{VAR}}`                       | `envsubst`‑style: `sed -E 's/\{\{([A-Z0-9_]+)\}\}/${\1}/g'` | Missing env‑var → warn not blank‑out. |
 | Loop resources, spawn with ``          | No layout logic yet; all on current tag.                    | GUI forks lose PID (tolerated now).   |
 | CLI: `workon [path]`                   | Default path = `$PWD`.                                      | Handle spaces in path.                |
 
-### Phase 2 — **Session File & Stop**   `(tag: v0.1)` 🔜
+### Phase 2 — **Session File & Stop**   `(tag: v0.1.0)` ✅
 
-| Task                                 | Resources                                                                  | Tips / Gotchas             |
-| ------------------------------------ | -------------------------------------------------------------------------- | -------------------------- |
-| Create cache dir `~/.cache/workon`   | Use `${XDG_CACHE_HOME:-$HOME/.cache}`.                                     | Ensure mkdir ‑p.           |
-| After spawn: append `{cmd,pid}` JSON | `jq -n --arg cmd "$cmd" --argjson pid $pid '{cmd:$cmd,pid:$pid}' >> $file` | Concurrency — use `flock`. |
-| `workon stop`                        | Read file, `kill -TERM`, then `-KILL` after timeout.                       | Stale PIDs → ignore.       |
-| Remove session file                  |                                                                            |                            |
+**✅ COMPLETED** — Full session tracking and stop functionality implemented.
 
-### Phase 3 — **Default Layout (tags 1…N)**  `(tag: v0.2)` 🗓
+**Additional work completed:**
+- Comprehensive session management with atomic JSON operations
+- File locking for concurrent access protection  
+- Enhanced session data (cmd, name, pid, timestamp)
+- Robust error handling and corruption recovery
+- 15+ new unit tests for session management
+- Integration tests for start/stop workflows
+
+| Task                                 | Implementation details                                                     | Enhancements beyond original plan     |
+| ------------------------------------ | -------------------------------------------------------------------------- | -------------------------------------- |
+| Create cache dir `~/.cache/workon`   | XDG-compliant `cache_dir()` function with proper mkdir handling            | Full XDG Base Directory spec support  |
+| After spawn: append `{cmd,pid}` JSON | Atomic `json_append()` with validation, locking, and corruption recovery   | Added resource names and timestamps    |
+| `workon stop`                        | Graceful TERM→KILL escalation with 3s timeout, handles stale PIDs         | Process tracking with detailed feedback |
+| Remove session file                  | Atomic cleanup with lock file removal                                     | Comprehensive error handling           |
+
+### Phase 3 — **Default Layout (tags 1…N)**  `(tag: v0.2)` ⭐
 
 | Task                            | Reference                                             | Gotchas                                         |
 | ------------------------------- | ----------------------------------------------------- | ----------------------------------------------- |
 | Read `default_layout` row‑array | Already in YAML.                                      | Validate index continuity.                      |
 | Spawn per row → tag index       | `awesome-client 'awful.spawn("cmd",{tag=tags[IDX]})'` | Multi‑monitor order differs per user; document. |
 
-### Phase 4 — **Multiple Layout Choice**  `(tag: v0.3)` 🗓
+### Phase 4 — **Multiple Layout Choice**  `(tag: v0.3)` 🗓
 
 - CLI flag `--layout <name>`
 - Interactive picker later (fzf).
 
-### Phase 5 — **Environment Sources**  `(tag: v0.4)` 🗓
+### Phase 5 — **Environment Sources**  `(tag: v0.4)` 🗓
 
 - First respect `direnv export bash`; fallback source `.env`.
 - Document security note (untrusted repos).
 
-### Phase 6 — **Robust PID capture (client callback)**  `(tag: v0.5)` 🗓
+### Phase 6 — **Robust PID capture (client callback)**  `(tag: v0.5)` 🗓
 
-- Use Awesome’s Lua:
+- Use Awesome's Lua:
   ```lua
   awful.spawn(cmd, { tag = t }, function(c) io.write(c.pid.."\n") end)
   ```
 - Pipe that to session writer.
 - ⚠️  Needs `< /dev/null` with awesome-client.
 
-### Phase 7 — **Window fallback stop**  `(tag: v0.6)` 🗓
+### Phase 7 — **Window fallback stop**  `(tag: v0.6)` 🗓
 
 - Lua iterate `client.get()`; match on `pid` or partial `cmd`.
 - Careful with RegExp escaping.
 
-### Phase 8 — **Safety & QoL**  `(tag: v0.7)` 🗓
+### Phase 8 — **Safety & QoL**  `(tag: v0.7)` 🗓
 
 - `--dry-run` prints spawn plan.
 - `--unique` aborts if live session exists.
 - Stale‑cache warning (>48h).
 
-### Phase 9 — **Per‑resource flags**  `(tag: v0.8)` 🗓
+### Phase 9 — **Per‑resource flags**  `(tag: v0.8)` 🗓
 
 - YAML schema extension:
   ```yaml
@@ -105,12 +115,12 @@
   ```
 - Need YAML → JSON transformation update.
 
-### Phase 10 — **Multi‑monitor / named tags**  `(tag: v1.0‑rc)` 🗓
+### Phase 10 — **Multi‑monitor / named tags**  `(tag: v1.0‑rc)` 🗓
 
 - Accept `screen:tag` or literal tag names.
 - Use `awful.tag.find_by_name` + `awful.screen`.
 
-### Phase 11 — **Packaging & docs**  `(tag: v1.0)` 🗓
+### Phase 11 — **Packaging & docs**  `(tag: v1.0)` 🗓
 
 - Debian: `fpm -s dir -t deb -n workon`.
 - Homebrew `brew tap org/workon`.
@@ -120,11 +130,11 @@
 
 ## General tips & gotchas
 
-- **Shell quoting** — always build arrays (`cmd=(… )`) before `awesome-client` to avoid double‑quotes hell.
-- **YQ 3 vs 4** — v3 uses different CLI; pin `>= 4.2`.
-- **Awesome‑client blocking** — It exits only when Lua chunk finishes; printing PID then `io.flush()` is mandatory.
-- **Wayland** — *Not officially supported*; X11 PID ↔ window mapping assumed.
-- **Testing** — Use Xephyr + nested Awesome for CI.
+- **Shell quoting** — always build arrays (`cmd=(… )`) before `awesome-client` to avoid double‑quotes hell.
+- **YQ 3 vs 4** — v3 uses different CLI; pin `>= 4.2`.
+- **Awesome‑client blocking** — It exits only when Lua chunk finishes; printing PID then `io.flush()` is mandatory.
+- **Wayland** — *Not officially supported*; X11 PID ↔ window mapping assumed.
+- **Testing** — Use Xephyr + nested Awesome for CI.
 
 ---
 
@@ -140,4 +150,3 @@
 ---
 
 > *Keep this file in sync with reality.  Outdated road‑maps are worse than none.*
-

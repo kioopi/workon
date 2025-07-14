@@ -11,7 +11,7 @@ load '../test_helper/common'
     run ./bin/workon --version
     
     assert_success
-    assert_output --partial "workon 0.1.0-alpha"
+    assert_output --partial "workon 0.1.0"
 }
 
 @test "workon --help: exits successfully and shows usage" {

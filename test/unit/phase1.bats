@@ -77,7 +77,7 @@ teardown() {
     assert_output "Just a plain string"
 }
 
-@test "render_template: handles multiple variables in single template" {
+@test "render_template: handles multiple variables in single template" t:
     # Arrange
     export VAR1="first"
     export VAR2="second"
@@ -167,7 +167,7 @@ teardown() {
     
     # Assert
     assert_success
-    assert_output "workon 0.1.0-alpha"
+    assert_output "workon 0.1.0"
 }
 
 @test "workon --help: displays usage information and options" {
