@@ -80,33 +80,20 @@ workon_start() {
         printf 'Run "workon stop" first to clean up previous session\n' >&2
     fi
     
-    # Spawn each resource with session tracking
-    local count=0
-    printf 'Starting resources:\n' >&2
-    
-    while read -r entry; do
-        if [[ -z $entry ]]; then
-            continue
+    # Launch all resources using single Lua script
+    if launch_all_resources_with_session "$session_file" "$resources"; then
+        # Report final status
+        if [[ -f "$session_file" ]]; then
+            local final_count
+            final_count=$(jq 'length' "$session_file" 2>/dev/null || echo 0)
+            printf 'Successfully started %d resources (session: %s)\n' "$final_count" "$(basename "$session_file")" >&2
+        else
+            printf 'Resources spawned but session file not found\n' >&2
         fi
-        
-        local name raw_cmd rendered_cmd
-        name=$(printf '%s' "$entry" | base64 -d | jq -r '.key' 2>/dev/null) || continue
-        raw_cmd=$(printf '%s' "$entry" | base64 -d | jq -r '.value' 2>/dev/null) || continue
-
-        # Render template variables
-        rendered_cmd=$(render_template "$raw_cmd")
-        
-        # Launch resource and record in session
-        if launch_resource_with_session "$session_file" "$name" "$rendered_cmd"; then
-            count=$((count + 1))
-        fi
-        
-    done <<<"$resources"
-    
-    # Wait for all background processes
-    wait
-    
-    printf 'Started %d resources (session: %s)\n' "$count" "$(basename "$session_file")" >&2
+    else
+        printf 'Error: Failed to spawn resources\n' >&2
+        return 1
+    fi
 }
 
 # Stop workspace and clean up session

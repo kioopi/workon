@@ -61,72 +61,102 @@ launch_resource() {
     return 0
 }
 
-# Launch a resource and record it in the session file
-launch_resource_with_session() {
+# Launch all resources using single Lua script execution
+launch_all_resources_with_session() {
     local session_file="$1"
-    local name="$2"
-    local command="$3"
+    local resources="$2"  # Base64-encoded resource entries
     
-    # Escape for awesome-client
-    local escaped_cmd
-    escaped_cmd=$(printf '%s' "pls-open $command" | sed 's/"/\\"/g; s/\\/\\\\/g')
+    # Prepare resources array for JSON
+    local resources_json="[]"
     
-    printf '  %s: %s\n' "$name" "$command" >&2
-
-    awesome-client <<-LUA
-    local awful = require("awful")
-    awful.spawn("${escaped_cmd}", {
-      callback = function(c) 
-        os.execute("echo \"" .. c.pid .. "\" > /home/vt/tmp/pid.txt")
-        if c.pid then
-          os.execute("write_session_entry \"${session_file}\" \"${command}\" \"${name}\" \"" .. c.pid .. "\"")
-        end
-      end
-    })
-LUA
-    # TODO: Find a way to check if the command was successfully launched 
-
-    return 0
-}
-
-write_session_entry() {
-    local session_file="$1"
-    local cmd="$2"
-    local name="$3"
-    local pid="$4"
-
-    # Validate inputs
-    if [[ -z $session_file || -z $cmd || -z $name || -z $pid ]]; then
-        die "Invalid parameters for write_session_entry"
-    fi
-
-    # Create JSON entry
-    local json_entry
-    json_entry=$(session_entry "$cmd" "$name" "$pid")
+    printf 'Preparing resources for spawning:\n' >&2
     
-    # Append to session file with locking
-    with_lock "$session_file" json_append "$session_file" "$json_entry"
-}
+    while read -r entry; do
+        if [[ -z $entry ]]; then
+            continue
+        fi
+        
+        local name raw_cmd rendered_cmd
+        name=$(printf '%s' "$entry" | base64 -d | jq -r '.key' 2>/dev/null) || continue
+        raw_cmd=$(printf '%s' "$entry" | base64 -d | jq -r '.value' 2>/dev/null) || continue
 
-
-session_entry() {
-    local cmd="$1"
-    local name="$2"
-    local pid="$3"
+        # Render template variables
+        rendered_cmd=$(render_template "$raw_cmd")
+        
+        printf '  %s: %s\n' "$name" "$rendered_cmd" >&2
+        
+        # Add to resources JSON array
+        local resource_entry
+        resource_entry=$(jq -n \
+            --arg name "$name" \
+            --arg cmd "pls-open $rendered_cmd" \
+            '{name: $name, cmd: $cmd}')
+        
+        resources_json=$(printf '%s' "$resources_json" | jq ". + [$resource_entry]")
+        
+    done <<<"$resources"
     
-    # Validate inputs
-    if [[ -z $cmd || -z $name || -z $pid ]]; then
-        die "Invalid session entry parameters"
+    # Check if we have any resources to spawn
+    local resource_count
+    resource_count=$(printf '%s' "$resources_json" | jq 'length')
+    
+    if [[ $resource_count -eq 0 ]]; then
+        printf 'No resources to spawn\n' >&2
+        return 1
     fi
     
-    # Create JSON entry
-    jq -n \
-        --arg cmd "$cmd" \
-        --arg name "$name" \
-        --argjson pid "$pid" \
-        --argjson timestamp "$(date +%s)" \
-        '{cmd: $cmd, name: $name, pid: $pid, timestamp: $timestamp}'
+    printf 'Spawning %d resources via single Lua script...\n' "$resource_count" >&2
+    
+    # Prepare configuration for Lua script
+    local spawn_config
+    spawn_config=$(jq -n \
+        --arg session_file "$session_file" \
+        --argjson resources "$resources_json" \
+        '{session_file: $session_file, resources: $resources}')
+    
+    # Execute the spawn script with configuration embedded directly in Lua
+    # Set the environment variables as global Lua variables since env vars may not pass through
+    printf 'Executing awesome-client with embedded configuration\n' >&2
+    
+    # Escape the JSON for Lua string literal
+    local escaped_config
+    escaped_config=$(printf '%s' "$spawn_config" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/g' | tr -d '\n')
+    
+    awesome-client "
+        WORKON_DIR = '$WORKON_DIR'
+        WORKON_SPAWN_CONFIG = '$escaped_config'
+        dofile('$WORKON_DIR/lib/spawn_resources.lua')
+    "
+    
+    # Wait for session file to be created/updated
+    local timeout=15
+    local initial_count=0
+    
+    if [[ -f "$session_file" ]]; then
+        initial_count=$(jq 'length' "$session_file" 2>/dev/null || echo 0)
+    fi
+    
+    while [[ $timeout -gt 0 ]]; do
+        if [[ -f "$session_file" ]]; then
+            local current_count
+            current_count=$(jq 'length' "$session_file" 2>/dev/null || echo 0)
+            
+            # Check if we have new entries (allowing for partial success)
+            if [[ $current_count -gt $initial_count ]]; then
+                printf 'Session file updated with %d entries\n' "$current_count" >&2
+                return 0
+            fi
+        fi
+        
+        sleep 0.5
+        timeout=$((timeout - 1))
+    done
+    
+    printf 'Warning: Session file not updated within timeout\n' >&2
+    return 1
 }
+
+# Legacy functions removed - session entries are now created by Lua script
 
 # Parse and validate manifest JSON
 parse_manifest() {
@@ -195,41 +225,7 @@ with_lock() {
     } 200>"${lock_file}.lock"
 }
 
-# Atomically append JSON entry to session file
-json_append() {
-    local session_file="$1"
-    local json_entry="$2"
-    local tmp_file
-    
-    # Validate JSON entry format
-    if ! jq -e . <<<"$json_entry" >/dev/null 2>&1; then
-        die "Invalid JSON entry for session file"
-    fi
-    
-    tmp_file=$(mktemp) || die "Cannot create temporary file"
-    
-    # Append to existing array or create new array
-    if [[ -s $session_file ]]; then
-        if ! jq -e type <<<"$(cat "$session_file")" >/dev/null 2>&1; then
-            printf '[]' >"$session_file"  # Reset corrupted file
-        fi
-        jq ". + [$json_entry]" "$session_file" >"$tmp_file" 2>/dev/null || {
-            rm -f "$tmp_file"
-            die "Failed to append to session file"
-        }
-    else
-        jq -n "[$json_entry]" >"$tmp_file" 2>/dev/null || {
-            rm -f "$tmp_file"
-            die "Failed to create session file"
-        }
-    fi
-    
-    # Atomically replace session file
-    mv "$tmp_file" "$session_file" || {
-        rm -f "$tmp_file"
-        die "Failed to update session file"
-    }
-}
+# Legacy json_append function removed - session files are now written by Lua script
 
 # Validate and read session file
 read_session() {
@@ -249,6 +245,78 @@ read_session() {
     cat "$session_file"
 }
 
+# Stop a single resource using multiple cleanup strategies
+stop_resource() {
+    local entry="$1"
+    local pid class instance name
+    
+    # Extract metadata from session entry
+    pid=$(printf '%s' "$entry" | jq -r '.pid // empty' 2>/dev/null)
+    class=$(printf '%s' "$entry" | jq -r '.class // empty' 2>/dev/null)
+    instance=$(printf '%s' "$entry" | jq -r '.instance // empty' 2>/dev/null)
+    name=$(printf '%s' "$entry" | jq -r '.name // empty' 2>/dev/null)
+    
+    printf 'Stopping %s (PID: %s)\n' "${name:-unknown}" "${pid:-unknown}" >&2
+    
+    # Strategy 1: Direct PID kill (most reliable)
+    if [[ -n $pid && $pid != "0" ]] && kill -0 "$pid" 2>/dev/null; then
+        printf '  Using PID %s for cleanup\n' "$pid" >&2
+        if kill -TERM "$pid" 2>/dev/null; then
+            sleep 3
+            if kill -0 "$pid" 2>/dev/null; then
+                printf '  Force killing PID %s\n' "$pid" >&2
+                kill -KILL "$pid" 2>/dev/null || true
+            fi
+            return 0
+        fi
+    fi
+    
+    # Strategy 2: Window-based cleanup with xdotool (if available)
+    if command -v xdotool >/dev/null 2>&1; then
+        printf '  Trying window-based cleanup with xdotool\n' >&2
+        
+        # Try using PID to find windows
+        if [[ -n $pid && $pid != "0" ]]; then
+            if xdotool search --pid "$pid" windowclose 2>/dev/null; then
+                printf '  Closed windows for PID %s\n' "$pid" >&2
+                return 0
+            fi
+        fi
+        
+        # Try using window class
+        if [[ -n $class ]]; then
+            if xdotool search --class "$class" windowclose 2>/dev/null; then
+                printf '  Closed windows with class "%s"\n' "$class" >&2
+                return 0
+            fi
+        fi
+        
+        # Try using window instance
+        if [[ -n $instance ]]; then
+            if xdotool search --classname "$instance" windowclose 2>/dev/null; then
+                printf '  Closed windows with instance "%s"\n' "$instance" >&2
+                return 0
+            fi
+        fi
+    fi
+    
+    # Strategy 3: wmctrl fallback (if available)
+    if command -v wmctrl >/dev/null 2>&1; then
+        printf '  Trying wmctrl fallback\n' >&2
+        
+        # Try to close windows by class name
+        if [[ -n $class ]]; then
+            if wmctrl -c "$class" 2>/dev/null; then
+                printf '  Closed window with wmctrl (class: %s)\n' "$class" >&2
+                return 0
+            fi
+        fi
+    fi
+    
+    printf '  Warning: Could not stop %s (no reliable method found)\n' "${name:-unknown}" >&2
+    return 1
+}
+
 # Implementation for stopping a session (called with file lock)
 stop_session_impl() {
     local session_file="$1"
@@ -260,37 +328,25 @@ stop_session_impl() {
         return 1
     fi
     
-    # Extract PIDs and stop processes
-    local pids
-    mapfile -t pids < <(printf '%s' "$session_data" | jq -r '.[].pid // empty' 2>/dev/null)
+    # Parse session entries
+    local entries
+    mapfile -t entries < <(printf '%s' "$session_data" | jq -c '.[]' 2>/dev/null)
     
-    if [[ ${#pids[@]} -eq 0 ]]; then
-        printf 'No processes found in session\n' >&2
+    if [[ ${#entries[@]} -eq 0 ]]; then
+        printf 'No resources found in session\n' >&2
     else
-        printf 'Stopping %d processes...\n' "${#pids[@]}" >&2
+        printf 'Stopping %d resources...\n' "${#entries[@]}" >&2
         
-        # First pass: send TERM signal
-        local live_pids=()
-        for pid in "${pids[@]}"; do
-            if [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null; then
-                printf '  Terminating PID %s\n' "$pid" >&2
-                kill -TERM "$pid" 2>/dev/null || true
-                live_pids+=("$pid")
+        local success_count=0
+        
+        # Stop each resource using multiple strategies
+        for entry in "${entries[@]}"; do
+            if stop_resource "$entry"; then
+                success_count=$((success_count + 1))
             fi
         done
         
-        # Give processes time to exit gracefully
-        if [[ ${#live_pids[@]} -gt 0 ]]; then
-            sleep 3
-            
-            # Second pass: send KILL signal to remaining processes
-            for pid in "${live_pids[@]}"; do
-                if kill -0 "$pid" 2>/dev/null; then
-                    printf '  Force killing PID %s\n' "$pid" >&2
-                    kill -KILL "$pid" 2>/dev/null || true
-                fi
-            done
-        fi
+        printf 'Successfully stopped %d/%d resources\n' "$success_count" "${#entries[@]}" >&2
     fi
     
     # Clean up session file and lock

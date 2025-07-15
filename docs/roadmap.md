@@ -52,20 +52,33 @@
 
 **✅ COMPLETED** — Full session tracking and stop functionality implemented.
 
+**Major architectural improvement completed:**
+- **Single Lua Script Architecture**: Replaced fragile bash/AwesomeWM round-trips with unified Lua spawn script
+- **Real PID Tracking**: Now captures actual application PIDs via `awful.spawn()` instead of useless awesome-client PIDs
+- **Enhanced Session Metadata**: Sessions include window class, instance, and properties for robust cleanup
+- **Multi-Strategy Cleanup**: Stop functionality uses PID → xdotool → wmctrl fallback hierarchy
+- **Comprehensive Test Coverage**: 15+ unit tests for new architecture with extensive mocking
+
 **Additional work completed:**
 - Comprehensive session management with atomic JSON operations
 - File locking for concurrent access protection  
-- Enhanced session data (cmd, name, pid, timestamp)
+- Enhanced session data (cmd, name, pid, timestamp, window metadata)
 - Robust error handling and corruption recovery
-- 15+ new unit tests for session management
-- Integration tests for start/stop workflows
+- Security improvements (eliminated shell injection vulnerabilities)
+- Simplified debugging and maintenance
 
 | Task                                 | Implementation details                                                     | Enhancements beyond original plan     |
 | ------------------------------------ | -------------------------------------------------------------------------- | -------------------------------------- |
 | Create cache dir `~/.cache/workon`   | XDG-compliant `cache_dir()` function with proper mkdir handling            | Full XDG Base Directory spec support  |
-| After spawn: append `{cmd,pid}` JSON | Atomic `json_append()` with validation, locking, and corruption recovery   | Added resource names and timestamps    |
-| `workon stop`                        | Graceful TERM→KILL escalation with 3s timeout, handles stale PIDs         | Process tracking with detailed feedback |
+| Lua spawn script                     | Single `lib/spawn_resources.lua` handles all spawning with real PIDs      | **MAJOR**: Architectural redesign for reliability |
+| Enhanced session format             | JSON with window metadata (class, instance, window_id) for robust cleanup | Window management integration |
+| Multi-strategy stop                  | PID kill → xdotool → wmctrl fallback with comprehensive error handling    | **MAJOR**: Reliable cleanup for all app types |
 | Remove session file                  | Atomic cleanup with lock file removal                                     | Comprehensive error handling           |
+
+**Breaking Changes:**
+- Session file format updated to include window metadata
+- Removed legacy `json_append()` and `write_session_entry` functions
+- Spawning now happens in single Lua execution instead of per-resource calls
 
 ### Phase 3 — **Default Layout (tags 1…N)**  `(tag: v0.2)` ⭐
 

@@ -28,23 +28,32 @@ workon.yaml → yq → JSON → template expansion → pls-open commands → awe
 
 ## Development Phases
 
-### Phase 0 (Current) - Bootstrap v0.0
+### Phase 0 - Bootstrap v0.0 ✅
 **Goal**: Infrastructure foundation with no functionality
 - ✅ Git repo with proper structure
 - ✅ Documentation and licensing
-- ⏳ CLI stub (`bin/workon`)
-- ⏳ Dependency validation (`bin/check-deps`)
-- ⏳ CI/CD with shellcheck + bats
-- ⏳ Pre-commit hooks
+- ✅ CLI stub (`bin/workon`)
+- ✅ Dependency validation (`bin/check-deps`)
+- ✅ CI/CD with shellcheck + bats
+- ✅ Pre-commit hooks
 
-### Phase 1 (Next) - Minimal Start-only v0.1-alpha
-- Locate `workon.yaml` (walk upward from current dir)
-- Parse YAML → JSON with `yq`
-- Expand `{{VAR}}` templates
-- Spawn all resources via `pls-open` on current tag
-- CLI: `workon [path]`
+### Phase 1 - Minimal Start-only v0.1-alpha ✅
+- ✅ Locate `workon.yaml` (walk upward from current dir)
+- ✅ Parse YAML → JSON with `yq`
+- ✅ Expand `{{VAR}}` templates
+- ✅ Spawn all resources via `pls-open` on current tag
+- ✅ CLI: `workon [path]`
 
-### Phase 2+ - Session tracking, layouts, multiple layouts, etc.
+### Phase 2 - Session tracking and stop v0.1.0 ✅ 
+**Major Architectural Achievement**: Single Lua Script Architecture
+- ✅ Real PID tracking via `awful.spawn()` instead of useless awesome-client PIDs
+- ✅ Single `lib/spawn_resources.lua` eliminates bash/AwesomeWM round-trip complexity
+- ✅ Enhanced session metadata with window properties for robust cleanup
+- ✅ Multi-strategy stop: PID → xdotool → wmctrl fallback hierarchy
+- ✅ Security improvements (eliminated shell injection vulnerabilities)
+- ✅ Comprehensive test coverage with extensive mocking
+
+### Phase 3+ - Layouts, multiple layouts, etc.
 
 ## File Structure
 ```
@@ -53,7 +62,12 @@ workon/
 │   ├── workon           # Main CLI script
 │   ├── pls-open         # Universal launcher (vendored)
 │   └── check-deps       # Dependency validator
+├── lib/
+│   ├── workon.sh        # Core bash library functions
+│   └── spawn_resources.lua # AwesomeWM Lua spawn script (Phase 2+)
 ├── docs/                # Design docs and implementation guides
+│   ├── lua_spawn_architecture.md # Architecture documentation
+│   └── roadmap.md       # Development roadmap
 ├── test/unit/           # Bats test files
 ├── examples/            # Sample workon.yaml files
 └── .github/workflows/   # CI configuration
