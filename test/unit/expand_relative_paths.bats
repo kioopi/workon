@@ -118,13 +118,14 @@ teardown() {
     assert_output "vim $PWD/local.txt /etc/hosts https://example.com"
 }
 
-@test "expand_relative_paths: handles non-existent files" {
+@test "expand_relative_paths: does not expand non-existent files" {
+    # With simplified logic, only existing files are expanded
     # Act
     run expand_relative_paths "nonexistent.txt"
     
-    # Assert
+    # Assert - should remain unchanged since file doesn't exist
     assert_success
-    assert_output "$PWD/nonexistent.txt"
+    assert_output "nonexistent.txt"
 }
 
 @test "expand_relative_paths: preserves commands without file arguments" {

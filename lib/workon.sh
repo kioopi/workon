@@ -499,61 +499,114 @@ resource_exists() {
 # - Expands relative paths to absolute paths based on current working directory
 expand_relative_paths() {
     local cmd="$1"
-    local expanded_cmd=""
+    local -a words
     
-    # Split command into words for processing
-    local words=()
-    read -ra words <<< "$cmd"
+    # Use eval to let bash handle quote parsing properly
+    eval "words=($cmd)"
     
+    local result=""
     for word in "${words[@]}"; do
-        # Skip URLs (contain :// or start with known protocols)
-        if [[ $word =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:// ]]; then
-            expanded_cmd+="$word "
-            continue
-        fi
+        local expanded_word
+        expanded_word=$(expand_word_if_path "$word")
         
-        # Skip absolute paths (start with /)
-        if [[ $word == /* ]]; then
-            expanded_cmd+="$word "
-            continue
-        fi
-        
-        # Skip if it looks like a command flag (starts with -)
-        if [[ $word == -* ]]; then
-            expanded_cmd+="$word "
-            continue
-        fi
-        
-        # Skip if it's just a single dot (current directory)
-        if [[ $word == "." ]]; then
-            expanded_cmd+="$word "
-            continue
-        fi
-        
-        # Check if it's a command in PATH first
-        if command -v "$word" >/dev/null 2>&1; then
-            # It's a command in PATH, don't expand it
-            expanded_cmd+="$word "
-        # Check if word looks like a relative path
-        # (contains / or has a file extension or exists as a file)
-        elif [[ $word == */* ]] || [[ $word == *.* ]] || [[ -f $word ]]; then
-            # Convert to absolute path
-            if [[ -e $word ]]; then
-                # File exists, use realpath
-                expanded_cmd+="$(realpath "$word") "
-            else
-                # File doesn't exist, but might be a relative path
-                # Convert to absolute path relative to current directory
-                expanded_cmd+="$(readlink -f "$word") "
-            fi
-        else
-            # Not a path, keep as-is
-            expanded_cmd+="$word "
-        fi
+        # Use printf %q to properly quote the result
+        result+="$(printf '%q' "$expanded_word") "
     done
     
     # Remove trailing space and output
-    printf '%s' "${expanded_cmd% }"
+    printf '%s' "${result% }"
+}
+
+# Helper function to expand a word if it's a path
+expand_word_if_path() {
+    local word="$1"
+    
+    # Skip URLs (contain :// or start with known protocols)
+    if [[ $word =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:// ]]; then
+        printf '%s' "$word"
+        return
+    fi
+    
+    # Skip absolute paths (start with /)
+    if [[ $word == /* ]]; then
+        printf '%s' "$word"
+        return
+    fi
+    
+    # Skip if it looks like a command flag (starts with -)
+    if [[ $word == -* ]]; then
+        printf '%s' "$word"
+        return
+    fi
+    
+    # Skip if it's just a single dot (current directory)
+    if [[ $word == "." ]]; then
+        printf '%s' "$word"
+        return
+    fi
+    
+    # Check if it's a command in PATH first
+    if command -v "$word" >/dev/null 2>&1; then
+        # It's a command in PATH, don't expand it
+        printf '%s' "$word"
+        return
+    fi
+    
+    # Handle special patterns like "file=@path" or "option=path"
+    if [[ $word == *=@* ]]; then
+        local prefix="${word%%=@*}"
+        local suffix="${word#*=@}"
+        if should_expand_as_path "$suffix"; then
+            printf '%s=@%s' "$prefix" "$(expand_to_absolute_path "$suffix")"
+            return
+        fi
+    elif [[ $word == *=* ]]; then
+        local prefix="${word%%=*}"
+        local suffix="${word#*=}"
+        if should_expand_as_path "$suffix"; then
+            printf '%s=%s' "$prefix" "$(expand_to_absolute_path "$suffix")"
+            return
+        fi
+    fi
+    
+    # Check if word looks like a relative path
+    if should_expand_as_path "$word"; then
+        # Convert to absolute path
+        expand_to_absolute_path "$word"
+        return
+    fi
+    
+    # Not a path, keep as-is
+    printf '%s' "$word"
+}
+
+# Helper function to determine if a word should be expanded as a path
+should_expand_as_path() {
+    local word="$1"
+    
+    # Expand if contains / (subdirectory) or if file/directory exists
+    [[ $word == */* ]] || [[ -e $word ]]
+}
+
+# Helper function to expand a path to absolute, with fallback for portability
+expand_to_absolute_path() {
+    local path="$1"
+    
+    if [[ -e "$path" ]]; then
+        # File exists, use realpath
+        realpath "$path"
+    else
+        # File doesn't exist, try realpath with --canonicalize-missing first
+        if realpath --canonicalize-missing "$path" 2>/dev/null; then
+            return 0
+        elif readlink -f "$path" 2>/dev/null; then
+            # Fallback to readlink -f if available
+            return 0
+        else
+            # Neither available, construct manually
+            printf '%s/%s' "$PWD" "$path"
+        fi
+    fi
 }
 
 # ─── Template Processing Utilities ─────────────────────────────────────────
