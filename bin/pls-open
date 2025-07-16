@@ -29,6 +29,7 @@
 #   pls-open index.html           # falls back to `xdg-open index.html`
 #   pls-open ./foo.desktop        # launch using an explicit desktop file
 #
+
 set -euo pipefail
 
 # ---------- constants --------------------------------------------------------
@@ -61,16 +62,18 @@ resolve_desktop_file() {
     done
 
     for p in "${paths[@]}"; do
-        local candidate="$p/$id.desktop"
+        local candidate="$p/$id"
         [[ -r $candidate ]] && { echo "$candidate"; return; }
     done
 
     die "Cannot locate desktop file for '$id'"
 }
 
-# substitute_placeholders <exec-line> <file> <desktop-id> <desktop-path>
+# substitute_placeholders <exec-line> <file> <desktop-path>
 substitute_placeholders() {
-    local cmd="$1" file="$2" id="$3" path="$4"
+    local cmd="$1" file="$2" path="$3", id
+
+    id=$(basename path .txt)
 
     cmd=${cmd//%[fFuU]/$file}
     cmd=${cmd//%c/$id}
@@ -103,15 +106,19 @@ shift || true  # leave $@ intact if there were no more params
 
 # single argument that looks like a file or URL → delegate
 if [[ $# -eq 0 && ( $first_arg == *://* || -e $first_arg || $first_arg == */* ) ]]; then
-    if "$DRY_RUN"; then
-        printf '%q ' xdg-open "$first_arg"
-        printf '\n'
-        exit 0
-    fi
-
     cmd="xdg-open $first_arg"
-    needs_terminal="true"
+    needs_terminal="false"
 
+    mime_type="$(xdg-mime query filetype "$first_arg" 2>/dev/null)"
+    if [[ -z $mime_type ]]; then
+        die "Cannot determine MIME type for '$first_arg'"
+    fi
+    default_app="$(xdg-mime query default "$mime_type" 2>/dev/null)"
+    if [[ -z $default_app ]]; then
+        die "No default application for MIME type '$mime_type'"
+    fi
+    desktop_file="$(resolve_desktop_file "$default_app")"
+    target_file="$first_arg"
 else
     # explicit .desktop path
     if [[ -f $first_arg && $first_arg == *.desktop ]]; then
@@ -121,24 +128,24 @@ else
     else
       # Otherwise treat first_arg as a desktop‑id
       desktop_id="$first_arg"
-      desktop_file="$(resolve_desktop_file "$desktop_id")"
+      desktop_file="$(resolve_desktop_file "$desktop_id.desktop")"
     fi
-
-
     target_file="${1:-}"
+fi
 
-    exec_line="$(get_value Exec "$desktop_file")"
-    [[ -z $exec_line ]] && die "No Exec entry in $desktop_file"
 
-    needs_terminal="$(get_value Terminal "$desktop_file" | tr '[:upper:]' '[:lower:]')"
 
-    cmd="$(substitute_placeholders "$exec_line" "$target_file" "$desktop_id" "$desktop_file")"
+exec_line="$(get_value Exec "$desktop_file")"
+[[ -z $exec_line ]] && die "No Exec entry in $desktop_file"
 
-    # ---------- handle flags that depend on desktop entry ------------------------
-    if [[ $needs_terminal != "true" && $KEEP_OPEN == true ]]; then
-        printf 'Note: --keep-open ignored because Terminal=false in %s\n' "$desktop_file" >&2
-        KEEP_OPEN=false
-    fi
+needs_terminal="$(get_value Terminal "$desktop_file" | tr '[:upper:]' '[:lower:]')"
+
+cmd="$(substitute_placeholders "$exec_line" "$target_file" "$desktop_file")"
+
+# ---------- handle flags that depend on desktop entry ------------------------
+if [[ $needs_terminal != "true" && $KEEP_OPEN == true ]]; then
+    printf 'Note: --keep-open ignored because Terminal=false in %s\n' "$desktop_file" >&2
+    KEEP_OPEN=false
 fi
 
 # ---------- build the final command array -----------------------------------

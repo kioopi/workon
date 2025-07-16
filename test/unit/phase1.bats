@@ -167,7 +167,7 @@ teardown() {
     
     # Assert
     assert_success
-    assert_output "workon 0.1.0-alpha"
+    assert_output "workon 0.1.0"
 }
 
 @test "workon --help: displays usage information and options" {
