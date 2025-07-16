@@ -58,6 +58,9 @@ check_yq_version "YAML processor v4+" "sudo wget -qO /usr/local/bin/yq https://g
 check_command "jq" "JSON processor" "apt install jq / pacman -S jq"
 check_command "awesome-client" "AwesomeWM client" "apt install awesome / pacman -S awesome"
 
+# Phase 2 runtime dependencies (Lua spawn architecture)
+check_command "lua" "Lua interpreter" "apt install lua5.4 / pacman -S lua"
+
 echo
 if [[ $ERRORS -eq 0 ]]; then
     echo "All dependencies satisfied ✓"

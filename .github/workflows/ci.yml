@@ -9,7 +9,9 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck bats jq awesome
+          sudo apt-get install -y shellcheck bats jq awesome lua5.4
+          # Create lua symlink for tests
+          sudo ln -sf /usr/bin/lua5.4 /usr/local/bin/lua
           # Install bats-support
           sudo git clone https://github.com/bats-core/bats-support.git /usr/lib/bats/bats-support
           # Install bats-assert
