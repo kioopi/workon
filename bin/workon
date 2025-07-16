@@ -22,6 +22,9 @@ Usage: workon [COMMAND] [OPTIONS] [PROJECT_PATH]
 Commands:
   start             Start workspace (default command)
   stop              Stop workspace and clean up session
+  info              Show system information and debug details
+  validate          Validate workon.yaml manifest file
+  resolve           Show resolved command for a resource
 
 Options:
   -v, --version     Show version information
@@ -35,6 +38,11 @@ Examples:
   workon start ~/my-project # Start workspace from specific directory
   workon stop               # Stop current workspace session
   workon stop ~/my-project  # Stop workspace session in specific directory
+  workon info               # Show system information and dependencies
+  workon info sessions      # List all active sessions
+  workon info session       # Show details for current session
+  workon validate           # Validate current directory's workon.yaml
+  workon resolve ide        # Show resolved command for 'ide' resource
 EOF
 }
 
@@ -139,7 +147,7 @@ while [[ $# -gt 0 ]]; do
             usage
             exit 0
             ;;
-        start|stop)
+        start|stop|info|validate|resolve)
             command="$1"
             shift
             ;;
@@ -165,6 +173,15 @@ case "$command" in
         ;;
     stop)
         workon_stop "$@"
+        ;;
+    info)
+        workon_info "$@"
+        ;;
+    validate)
+        workon_validate "$@"
+        ;;
+    resolve)
+        workon_resolve "$@"
         ;;
     *)
         die "Unknown command: $command"
