@@ -262,7 +262,7 @@ stop_resource() {
     if [[ -n $pid && $pid != "0" ]] && kill -0 "$pid" 2>/dev/null; then
         printf '  Using PID %s for cleanup\n' "$pid" >&2
         if kill -TERM "$pid" 2>/dev/null; then
-            sleep 3
+            sleep 1
             if kill -0 "$pid" 2>/dev/null; then
                 printf '  Force killing PID %s\n' "$pid" >&2
                 kill -KILL "$pid" 2>/dev/null || true
