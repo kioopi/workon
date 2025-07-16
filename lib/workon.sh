@@ -83,13 +83,16 @@ launch_all_resources_with_session() {
         # Render template variables
         rendered_cmd=$(render_template "$raw_cmd")
         
-        printf '  %s: %s\n' "$name" "$rendered_cmd" >&2
+        # Expand relative paths to absolute paths
+        expanded_cmd=$(expand_relative_paths "$rendered_cmd")
+        
+        printf '  %s: %s\n' "$name" "$expanded_cmd" >&2
         
         # Add to resources JSON array
         local resource_entry
         resource_entry=$(jq -n \
             --arg name "$name" \
-            --arg cmd "pls-open $rendered_cmd" \
+            --arg cmd "pls-open $expanded_cmd" \
             '{name: $name, cmd: $cmd}')
         
         resources_json=$(printf '%s' "$resources_json" | jq ". + [$resource_entry]")
@@ -487,6 +490,72 @@ resource_exists() {
     return 1
 }
 
+# ─── Path Expansion Utilities ──────────────────────────────────────────────
+
+# Expand relative paths in a command to absolute paths
+# This function identifies potential file paths and expands them to absolute paths
+# - Preserves URLs (http://, https://, ftp://, etc.)
+# - Preserves absolute paths (starting with /)
+# - Expands relative paths to absolute paths based on current working directory
+expand_relative_paths() {
+    local cmd="$1"
+    local expanded_cmd=""
+    
+    # Split command into words for processing
+    local words=()
+    read -ra words <<< "$cmd"
+    
+    for word in "${words[@]}"; do
+        # Skip URLs (contain :// or start with known protocols)
+        if [[ $word =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:// ]]; then
+            expanded_cmd+="$word "
+            continue
+        fi
+        
+        # Skip absolute paths (start with /)
+        if [[ $word == /* ]]; then
+            expanded_cmd+="$word "
+            continue
+        fi
+        
+        # Skip if it looks like a command flag (starts with -)
+        if [[ $word == -* ]]; then
+            expanded_cmd+="$word "
+            continue
+        fi
+        
+        # Skip if it's just a single dot (current directory)
+        if [[ $word == "." ]]; then
+            expanded_cmd+="$word "
+            continue
+        fi
+        
+        # Check if it's a command in PATH first
+        if command -v "$word" >/dev/null 2>&1; then
+            # It's a command in PATH, don't expand it
+            expanded_cmd+="$word "
+        # Check if word looks like a relative path
+        # (contains / or has a file extension or exists as a file)
+        elif [[ $word == */* ]] || [[ $word == *.* ]] || [[ -f $word ]]; then
+            # Convert to absolute path
+            if [[ -e $word ]]; then
+                # File exists, use realpath
+                expanded_cmd+="$(realpath "$word") "
+            else
+                # File doesn't exist, but might be a relative path
+                # Convert to absolute path relative to current directory
+                expanded_cmd+="$(readlink -f "$word") "
+            fi
+        else
+            # Not a path, keep as-is
+            expanded_cmd+="$word "
+        fi
+    done
+    
+    # Remove trailing space and output
+    printf '%s' "${expanded_cmd% }"
+}
+
 # ─── Template Processing Utilities ─────────────────────────────────────────
 
 # Process template variables and show analysis
@@ -872,10 +941,14 @@ show_resolution_results() {
     local resolved_command
     resolved_command=$(render_template "$raw_command")
     
-    printf "✅ Resolved command: pls-open %s\n" "$resolved_command"
+    # Expand relative paths to absolute paths
+    local expanded_command
+    expanded_command=$(expand_relative_paths "$resolved_command")
+    
+    printf "✅ Resolved command: pls-open %s\n" "$expanded_command"
     
     # Check if file/command exists
-    printf "📋 File/Command exists: %s\n" "$(resource_exists "$resolved_command")"
+    printf "📋 File/Command exists: %s\n" "$(resource_exists "$expanded_command")"
 }
 
 # Show resolved command for a specific resource
@@ -900,9 +973,19 @@ workon_resolve() {
     
     printf "📁 Manifest: %s\n" "$manifest"
     
+    # Change to manifest directory for relative path resolution
+    local manifest_dir
+    manifest_dir=$(dirname "$manifest")
+    local orig_pwd="$PWD"
+    cd "$manifest_dir" || {
+        printf "❌ Cannot change to manifest directory: %s\n" "$manifest_dir"
+        return 1
+    }
+    
     # Parse manifest
     local manifest_json
     if ! manifest_json=$(parse_yaml_to_json "$manifest"); then
+        cd "$orig_pwd" || return 1
         printf "❌ Failed to parse manifest (YAML syntax error)\n"
         return 1
     fi
@@ -913,11 +996,15 @@ workon_resolve() {
     
     # Show resource info
     if ! show_resource_info "$resource_name" "$raw_command" "$manifest_json"; then
+        cd "$orig_pwd" || return 1
         return 1
     fi
     
     # Show resolution results
     show_resolution_results "$raw_command"
+    
+    # Restore original directory
+    cd "$orig_pwd" || return 1
     
     return 0
 }
