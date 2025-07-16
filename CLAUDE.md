@@ -51,7 +51,7 @@ workon.yaml → yq → JSON → template expansion → pls-open commands → awe
 - ✅ Enhanced session metadata with window properties for robust cleanup
 - ✅ Multi-strategy stop: PID → xdotool → wmctrl fallback hierarchy
 - ✅ Security improvements (eliminated shell injection vulnerabilities)
-- ✅ Comprehensive test coverage with extensive mocking
+- ✅ Comprehensive test coverage: 59 tests across 6 files (see [docs/test-coverage.md](docs/test-coverage.md))
 
 ### Phase 3+ - Layouts, multiple layouts, etc.
 
@@ -67,7 +67,8 @@ workon/
 │   └── spawn_resources.lua # AwesomeWM Lua spawn script (Phase 2+)
 ├── docs/                # Design docs and implementation guides
 │   ├── lua_spawn_architecture.md # Architecture documentation
-│   └── roadmap.md       # Development roadmap
+│   ├── roadmap.md       # Development roadmap
+│   └── test-coverage.md # Comprehensive test coverage analysis
 ├── test/unit/           # Bats test files
 ├── examples/            # Sample workon.yaml files
 └── .github/workflows/   # CI configuration
@@ -145,12 +146,24 @@ All bash scripts use `set -euo pipefail` for strict error handling.
 - Uses XDG cache directory for session files
 - Integrates with desktop entry system via `pls-open`
 
-## Current Status (Phase 0)
+## Current Status (Phase 2 Complete)
 
-The project is in bootstrap phase focusing on infrastructure:
-- Repository structure established
-- Documentation and roadmap complete
-- Testing and CI framework being implemented
-- No functional features yet - just tooling foundation
+**WorkOn is now fully functional with session management!**
 
-Next step is implementing the basic functionality in Phase 1.
+### ✅ **Completed Phases:**
+- **Phase 0**: Bootstrap infrastructure, documentation, CI/CD
+- **Phase 1**: Basic start-only functionality with YAML parsing and resource spawning
+- **Phase 2**: Complete session tracking and stop functionality with robust PID management
+
+### 🚀 **Current Capabilities:**
+- Start workspaces from `workon.yaml` manifests
+- Template expansion with `{{VAR}}` syntax
+- Session tracking with real PID capture
+- Robust stop functionality with multi-strategy cleanup
+- Comprehensive error handling and recovery
+- 59 automated tests with extensive mocking
+
+### ⭐ **Next Step: Phase 3** - Layout Support
+- Parse `default_layout` from YAML
+- Spawn resources on specific AwesomeWM tags
+- Distribute resources across multiple tags (tags[1], tags[2], etc.)

@@ -57,7 +57,7 @@
 - **Real PID Tracking**: Now captures actual application PIDs via `awful.spawn()` instead of useless awesome-client PIDs
 - **Enhanced Session Metadata**: Sessions include window class, instance, and properties for robust cleanup
 - **Multi-Strategy Cleanup**: Stop functionality uses PID → xdotool → wmctrl fallback hierarchy
-- **Comprehensive Test Coverage**: 15+ unit tests for new architecture with extensive mocking
+- **Comprehensive Test Coverage**: 28 unit tests for new architecture with extensive mocking (see [test-coverage.md](test-coverage.md))
 
 **Additional work completed:**
 - Comprehensive session management with atomic JSON operations
