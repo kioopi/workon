@@ -370,3 +370,362 @@ check_dependencies() {
         die "Missing required dependencies: ${missing[*]}"
     fi
 }
+
+# Check if a single dependency is available
+check_single_dependency() {
+    local cmd="$1"
+    if command -v "$cmd" >/dev/null 2>&1; then
+        printf "✓ available"
+    else
+        printf "✗ missing"
+    fi
+}
+
+# Show system information and debug details
+workon_info() {
+    local subcommand="${1:-}"
+    
+    case "$subcommand" in
+        "")
+            # Main info command
+            printf "WorkOn - one-shot project workspace bootstrapper\n\n"
+            printf "Version: %s\n" "$VERSION"
+            printf "Installation directory: %s\n" "$WORKON_DIR"
+            printf "Working directory: %s\n" "$PWD"
+            printf "Cache directory: %s\n" "$(cache_dir)"
+            printf "\n"
+            
+            # Check manifest status
+            local manifest
+            if manifest=$(find_manifest "$PWD" 2>/dev/null); then
+                printf "Manifest: Found (%s)\n" "$manifest"
+            else
+                printf "Manifest: Not found\n"
+            fi
+            printf "\n"
+            
+            # Show dependency status
+            printf "Dependencies:\n"
+            printf "  yq: %s\n" "$(check_single_dependency yq)"
+            printf "  jq: %s\n" "$(check_single_dependency jq)"
+            printf "  awesome-client: %s\n" "$(check_single_dependency awesome-client)"
+            printf "  realpath: %s\n" "$(check_single_dependency realpath)"
+            printf "  sha1sum: %s\n" "$(check_single_dependency sha1sum)"
+            printf "  flock: %s\n" "$(check_single_dependency flock)"
+            ;;
+        sessions)
+            # List all session files
+            printf "Active WorkOn Sessions\n"
+            printf "=====================\n\n"
+            
+            local cache_path
+            cache_path="$(cache_dir)"
+            
+            if [[ ! -d "$cache_path" ]]; then
+                printf "No cache directory found (%s)\n" "$cache_path"
+                return 0
+            fi
+            
+            local session_files
+            mapfile -t session_files < <(find "$cache_path" -name "*.json" -type f 2>/dev/null | sort)
+            
+            if [[ ${#session_files[@]} -eq 0 ]]; then
+                printf "No active sessions found\n"
+                return 0
+            fi
+            
+            printf "Found %d active session(s):\n\n" "${#session_files[@]}"
+            
+            for session_file in "${session_files[@]}"; do
+                local session_name
+                session_name=$(basename "$session_file" .json)
+                
+                local session_data resource_count
+                if session_data=$(read_session "$session_file" 2>/dev/null); then
+                    resource_count=$(printf '%s' "$session_data" | jq 'length' 2>/dev/null || echo "0")
+                else
+                    resource_count="0"
+                fi
+                
+                local file_size created_time
+                file_size=$(stat -c %s "$session_file" 2>/dev/null || echo "unknown")
+                created_time=$(stat -c %Y "$session_file" 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "unknown")
+                
+                printf "📁 Session: %s\n" "$session_name"
+                printf "   Resources: %s\n" "$resource_count"
+                printf "   Created: %s\n" "$created_time"
+                printf "   File size: %s bytes\n" "$file_size"
+                printf "\n"
+            done
+            ;;
+        session)
+            # Show details for a specific session
+            local project_path="${2:-$PWD}"
+            
+            printf "WorkOn Session Details\n"
+            printf "======================\n\n"
+            
+            local session_file
+            session_file=$(cache_file "$project_path")
+            
+            printf "📁 Project: %s\n" "$project_path"
+            printf "📄 Session file: %s\n" "$session_file"
+            
+            if [[ ! -f "$session_file" ]]; then
+                printf "❌ No active session found\n"
+                return 1
+            fi
+            
+            local session_data
+            if ! session_data=$(read_session "$session_file"); then
+                printf "❌ Failed to read session data\n"
+                return 1
+            fi
+            
+            local resource_count
+            resource_count=$(printf '%s' "$session_data" | jq 'length' 2>/dev/null || echo "0")
+            
+            printf "📦 Resources: %s\n\n" "$resource_count"
+            
+            if [[ "$resource_count" -gt 0 ]]; then
+                local entries
+                mapfile -t entries < <(printf '%s' "$session_data" | jq -c '.[]' 2>/dev/null)
+                
+                for entry in "${entries[@]}"; do
+                    local name pid cmd class instance spawn_time
+                    name=$(jq -r '.name // "unknown"' <<<"$entry" 2>/dev/null)
+                    pid=$(jq -r '.pid // "unknown"' <<<"$entry" 2>/dev/null)
+                    cmd=$(jq -r '.cmd // "unknown"' <<<"$entry" 2>/dev/null)
+                    class=$(jq -r '.class // ""' <<<"$entry" 2>/dev/null)
+                    instance=$(jq -r '.instance // ""' <<<"$entry" 2>/dev/null)
+                    spawn_time=$(jq -r '.spawn_time // ""' <<<"$entry" 2>/dev/null)
+                    
+                    printf "🎯 %s\n" "$name"
+                    printf "   PID: %s" "$pid"
+                    
+                    # Check if process is still running
+                    if [[ "$pid" != "unknown" && "$pid" != "0" ]] && kill -0 "$pid" 2>/dev/null; then
+                        printf " (✅ running)\n"
+                    else
+                        printf " (❌ stopped)\n"
+                    fi
+                    
+                    printf "   Command: %s\n" "$cmd"
+                    
+                    if [[ -n "$class" ]]; then
+                        printf "   Window class: %s\n" "$class"
+                    fi
+                    
+                    if [[ -n "$instance" ]]; then
+                        printf "   Window instance: %s\n" "$instance"
+                    fi
+                    
+                    if [[ -n "$spawn_time" ]]; then
+                        printf "   Spawned: %s\n" "$spawn_time"
+                    fi
+                    
+                    printf "\n"
+                done
+            fi
+            ;;
+        *)
+            printf "Unknown info subcommand: %s\n" "$subcommand" >&2
+            return 2
+            ;;
+    esac
+}
+
+# Extract template variables from a string
+extract_template_variables() {
+    local input="$1"
+    # Find all {{VAR}} and {{VAR:-default}} patterns
+    printf '%s' "$input" | grep -oE '\{\{[A-Za-z_][A-Za-z0-9_]*(:[-][^}]*)?\}\}' | sort | uniq || true
+}
+
+# Validate workon.yaml manifest file
+workon_validate() {
+    local project_path="${1:-$PWD}"
+    local manifest
+    
+    printf "WorkOn Manifest Validation\n"
+    printf "=========================\n\n"
+    
+    # Find manifest file
+    if ! manifest=$(find_manifest "$project_path"); then
+        printf "❌ No workon.yaml found in %s or parent directories\n" "$project_path"
+        return 2
+    fi
+    
+    printf "📁 Manifest file: %s\n" "$manifest"
+    
+    # Test YAML syntax
+    printf "🔍 YAML syntax: "
+    local manifest_json
+    if manifest_json=$(yq eval -o=json '.' "$manifest" 2>/dev/null); then
+        printf "✅ Valid\n"
+    else
+        printf "❌ YAML syntax error\n"
+        yq eval -o=json '.' "$manifest" 2>&1 | head -5
+        return 1
+    fi
+    
+    # Test structure
+    printf "🏗️  Structure: "
+    if ! jq -e '.resources' <<<"$manifest_json" >/dev/null 2>&1; then
+        printf "❌ Invalid - missing 'resources' section\n"
+        return 1
+    fi
+    
+    # Check if resources is empty
+    local resource_count
+    resource_count=$(jq -r '.resources | length' <<<"$manifest_json" 2>/dev/null)
+    if [[ "$resource_count" == "0" ]] || [[ "$resource_count" == "null" ]]; then
+        printf "❌ Invalid - No resources defined in manifest\n"
+        return 1
+    fi
+    
+    printf "✅ Valid\n"
+    
+    # Show resources
+    printf "📦 Resources: %s found\n" "$resource_count"
+    
+    # List each resource
+    while IFS= read -r resource_entry; do
+        local name cmd
+        name=$(jq -r '.key' <<<"$resource_entry" 2>/dev/null)
+        cmd=$(jq -r '.value' <<<"$resource_entry" 2>/dev/null)
+        printf "  • %s: %s\n" "$name" "$cmd"
+    done < <(jq -c '.resources | to_entries[]' <<<"$manifest_json" 2>/dev/null)
+    
+    # Show template variables
+    printf "\n🔧 Template variables: "
+    local all_commands
+    all_commands=$(jq -r '.resources | to_entries[] | .value' <<<"$manifest_json" 2>/dev/null)
+    local template_vars
+    template_vars=$(extract_template_variables "$all_commands")
+    
+    if [[ -n $template_vars ]]; then
+        printf "Found\n"
+        while IFS= read -r var; do
+            if [[ -n $var ]]; then
+                printf "  • %s\n" "$var"
+            fi
+        done <<<"$template_vars"
+    else
+        printf "None\n"
+    fi
+    
+    printf "\n✅ Valid manifest - ready to use!\n"
+    return 0
+}
+
+# Check if a file or command exists
+check_file_or_command_exists() {
+    local path="$1"
+    
+    # Check if it's a file first
+    if [[ -f "$path" ]]; then
+        printf "Yes (file)"
+        return 0
+    fi
+    
+    # Check if it's a command (first word)
+    local first_word
+    first_word=$(printf '%s' "$path" | awk '{print $1}')
+    if command -v "$first_word" >/dev/null 2>&1; then
+        printf "Yes (command)"
+        return 0
+    fi
+    
+    printf "No"
+    return 1
+}
+
+# Show resolved command for a specific resource
+workon_resolve() {
+    local resource_name="$1"
+    local project_path="${2:-$PWD}"
+    
+    if [[ -z $resource_name ]]; then
+        printf "Usage: workon resolve <resource> [project_path]\n" >&2
+        return 2
+    fi
+    
+    printf "WorkOn Resource Resolution\n"
+    printf "==========================\n\n"
+    
+    # Find manifest file
+    local manifest
+    if ! manifest=$(find_manifest "$project_path"); then
+        printf "❌ No workon.yaml found in %s or parent directories\n" "$project_path"
+        return 2
+    fi
+    
+    printf "📁 Manifest: %s\n" "$manifest"
+    
+    # Parse manifest
+    local manifest_json
+    if ! manifest_json=$(yq eval -o=json '.' "$manifest" 2>/dev/null); then
+        printf "❌ Failed to parse manifest (YAML syntax error)\n"
+        return 1
+    fi
+    
+    # Look up the resource
+    local raw_command
+    raw_command=$(jq -r --arg resource "$resource_name" '.resources[$resource] // empty' <<<"$manifest_json" 2>/dev/null)
+    
+    if [[ -z $raw_command ]]; then
+        printf "❌ Resource '%s' not found in manifest\n" "$resource_name"
+        printf "\nAvailable resources:\n"
+        jq -r '.resources | keys[] | "  • " + .' <<<"$manifest_json" 2>/dev/null
+        return 1
+    fi
+    
+    printf "🎯 Resource: %s\n" "$resource_name"
+    printf "📝 Raw command: %s\n" "$raw_command"
+    
+    # Extract template variables
+    local template_vars
+    template_vars=$(extract_template_variables "$raw_command")
+    
+    if [[ -n $template_vars ]]; then
+        printf "🔧 Template variables: "
+        local var_count=0
+        while IFS= read -r var; do
+            if [[ -n $var ]]; then
+                if [[ $var_count -eq 0 ]]; then
+                    printf "%s" "$var"
+                else
+                    printf ", %s" "$var"
+                fi
+                var_count=$((var_count + 1))
+            fi
+        done <<<"$template_vars"
+        printf "\n"
+        
+        # Show environment variable values
+        printf "🌍 Environment variables:\n"
+        while IFS= read -r var; do
+            if [[ -n $var ]]; then
+                # Extract just the variable name (without {{}} and default)
+                local var_name
+                var_name=$(printf '%s' "$var" | sed 's/{{//g; s/}}//g; s/:-.*//')
+                local var_value="${!var_name:-<unset>}"
+                printf "  • %s=%s\n" "$var_name" "$var_value"
+            fi
+        done <<<"$template_vars"
+    else
+        printf "🔧 Template variables: None\n"
+    fi
+    
+    # Resolve template variables
+    local resolved_command
+    resolved_command=$(render_template "$raw_command")
+    
+    printf "✅ Resolved command: pls-open %s\n" "$resolved_command"
+    
+    # Check if file/command exists
+    printf "📋 File/Command exists: %s\n" "$(check_file_or_command_exists "$resolved_command")"
+    
+    return 0
+}
