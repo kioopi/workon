@@ -17,7 +17,19 @@ load_project_dirs() {
 
     local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/workon/config.yaml"
     if [[ -f $cfg ]]; then
-        yq eval -o=json '.projects_path' "$cfg" 2>/dev/null | jq -r '.[]' 2>/dev/null
+        local yq_output
+        yq_output=$(yq eval -o=json '.projects_path' "$cfg" 2>/dev/null)
+        if [[ $? -ne 0 ]]; then
+            die "Failed to parse configuration file with yq: $cfg"
+        fi
+        
+        local jq_output
+        jq_output=$(printf '%s' "$yq_output" | jq -r '.[]' 2>/dev/null)
+        if [[ $? -ne 0 ]]; then
+            die "Failed to parse JSON output from yq with jq"
+        fi
+        
+        printf '%s' "$jq_output"
     fi
 }
 
