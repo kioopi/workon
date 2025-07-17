@@ -83,13 +83,16 @@ launch_all_resources_with_session() {
         # Render template variables
         rendered_cmd=$(render_template "$raw_cmd")
         
-        printf '  %s: %s\n' "$name" "$rendered_cmd" >&2
+        # Expand relative paths to absolute paths
+        expanded_cmd=$(expand_relative_paths "$rendered_cmd")
+        
+        printf '  %s: %s\n' "$name" "$expanded_cmd" >&2
         
         # Add to resources JSON array
         local resource_entry
         resource_entry=$(jq -n \
             --arg name "$name" \
-            --arg cmd "pls-open $rendered_cmd" \
+            --arg cmd "pls-open $expanded_cmd" \
             '{name: $name, cmd: $cmd}')
         
         resources_json=$(printf '%s' "$resources_json" | jq ". + [$resource_entry]")
@@ -487,6 +490,125 @@ resource_exists() {
     return 1
 }
 
+# ─── Path Expansion Utilities ──────────────────────────────────────────────
+
+# Expand relative paths in a command to absolute paths
+# This function identifies potential file paths and expands them to absolute paths
+# - Preserves URLs (http://, https://, ftp://, etc.)
+# - Preserves absolute paths (starting with /)
+# - Expands relative paths to absolute paths based on current working directory
+expand_relative_paths() {
+    local cmd="$1"
+    local -a words
+    
+    # Use eval to let bash handle quote parsing properly
+    eval "words=($cmd)"
+    
+    local result=""
+    for word in "${words[@]}"; do
+        local expanded_word
+        expanded_word=$(expand_word_if_path "$word")
+        
+        # Use printf %q to properly quote the result
+        result+="$(printf '%q' "$expanded_word") "
+    done
+    
+    # Remove trailing space and output
+    printf '%s' "${result% }"
+}
+
+# Helper function to expand a word if it's a path
+expand_word_if_path() {
+    local word="$1"
+    
+    # Skip URLs (contain :// or start with known protocols)
+    if [[ $word =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:// ]]; then
+        printf '%s' "$word"
+        return
+    fi
+    
+    # Skip absolute paths (start with /)
+    if [[ $word == /* ]]; then
+        printf '%s' "$word"
+        return
+    fi
+    
+    # Skip if it looks like a command flag (starts with -)
+    if [[ $word == -* ]]; then
+        printf '%s' "$word"
+        return
+    fi
+    
+    # Skip if it's just a single dot (current directory)
+    if [[ $word == "." ]]; then
+        printf '%s' "$word"
+        return
+    fi
+    
+    # Check if it's a command in PATH first
+    if command -v "$word" >/dev/null 2>&1; then
+        # It's a command in PATH, don't expand it
+        printf '%s' "$word"
+        return
+    fi
+    
+    # Handle special patterns like "file=@path" or "option=path"
+    if [[ $word == *=@* ]]; then
+        local prefix="${word%%=@*}"
+        local suffix="${word#*=@}"
+        if should_expand_as_path "$suffix"; then
+            printf '%s=@%s' "$prefix" "$(expand_to_absolute_path "$suffix")"
+            return
+        fi
+    elif [[ $word == *=* ]]; then
+        local prefix="${word%%=*}"
+        local suffix="${word#*=}"
+        if should_expand_as_path "$suffix"; then
+            printf '%s=%s' "$prefix" "$(expand_to_absolute_path "$suffix")"
+            return
+        fi
+    fi
+    
+    # Check if word looks like a relative path
+    if should_expand_as_path "$word"; then
+        # Convert to absolute path
+        expand_to_absolute_path "$word"
+        return
+    fi
+    
+    # Not a path, keep as-is
+    printf '%s' "$word"
+}
+
+# Helper function to determine if a word should be expanded as a path
+should_expand_as_path() {
+    local word="$1"
+    
+    # Expand if contains / (subdirectory) or if file/directory exists
+    [[ $word == */* ]] || [[ -e $word ]]
+}
+
+# Helper function to expand a path to absolute, with fallback for portability
+expand_to_absolute_path() {
+    local path="$1"
+    
+    if [[ -e "$path" ]]; then
+        # File exists, use realpath
+        realpath "$path"
+    else
+        # File doesn't exist, try realpath with --canonicalize-missing first
+        if realpath --canonicalize-missing "$path" 2>/dev/null; then
+            return 0
+        elif readlink -f "$path" 2>/dev/null; then
+            # Fallback to readlink -f if available
+            return 0
+        else
+            # Neither available, construct manually
+            printf '%s/%s' "$PWD" "$path"
+        fi
+    fi
+}
+
 # ─── Template Processing Utilities ─────────────────────────────────────────
 
 # Process template variables and show analysis
@@ -872,10 +994,14 @@ show_resolution_results() {
     local resolved_command
     resolved_command=$(render_template "$raw_command")
     
-    printf "✅ Resolved command: pls-open %s\n" "$resolved_command"
+    # Expand relative paths to absolute paths
+    local expanded_command
+    expanded_command=$(expand_relative_paths "$resolved_command")
+    
+    printf "✅ Resolved command: pls-open %s\n" "$expanded_command"
     
     # Check if file/command exists
-    printf "📋 File/Command exists: %s\n" "$(resource_exists "$resolved_command")"
+    printf "📋 File/Command exists: %s\n" "$(resource_exists "$expanded_command")"
 }
 
 # Show resolved command for a specific resource
@@ -900,9 +1026,19 @@ workon_resolve() {
     
     printf "📁 Manifest: %s\n" "$manifest"
     
+    # Change to manifest directory for relative path resolution
+    local manifest_dir
+    manifest_dir=$(dirname "$manifest")
+    local orig_pwd="$PWD"
+    cd "$manifest_dir" || {
+        printf "❌ Cannot change to manifest directory: %s\n" "$manifest_dir"
+        return 1
+    }
+    
     # Parse manifest
     local manifest_json
     if ! manifest_json=$(parse_yaml_to_json "$manifest"); then
+        cd "$orig_pwd" || return 1
         printf "❌ Failed to parse manifest (YAML syntax error)\n"
         return 1
     fi
@@ -913,11 +1049,15 @@ workon_resolve() {
     
     # Show resource info
     if ! show_resource_info "$resource_name" "$raw_command" "$manifest_json"; then
+        cd "$orig_pwd" || return 1
         return 1
     fi
     
     # Show resolution results
     show_resolution_results "$raw_command"
+    
+    # Restore original directory
+    cd "$orig_pwd" || return 1
     
     return 0
 }
