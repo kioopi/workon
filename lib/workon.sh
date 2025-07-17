@@ -8,6 +8,10 @@ die() {
     exit 2
 }
 
+# Config cache variables
+declare -g _WORKON_CONFIG_CACHE=""
+declare -g _WORKON_CONFIG_MTIME=""
+
 # Load project search directories from environment or config file
 load_project_dirs() {
     if [[ -n ${WORKON_PROJECTS_PATH:-} ]]; then
@@ -17,17 +21,41 @@ load_project_dirs() {
 
     local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/workon/config.yaml"
     if [[ -f $cfg ]]; then
+        # Check if config file is readable
+        if [[ ! -r $cfg ]]; then
+            die "Configuration file is not readable: $cfg"
+        fi
+        
+        # Check cache validity
+        local current_mtime
+        current_mtime=$(stat -c %Y "$cfg" 2>/dev/null) || current_mtime=0
+        
+        if [[ -n $_WORKON_CONFIG_CACHE && $_WORKON_CONFIG_MTIME == "$current_mtime" ]]; then
+            printf '%s' "$_WORKON_CONFIG_CACHE"
+            return 0
+        fi
+        
         local yq_output
-        yq_output=$(yq eval -o=json '.projects_path' "$cfg" 2>/dev/null)
-        if [[ $? -ne 0 ]]; then
-            die "Failed to parse configuration file with yq: $cfg"
+        if ! yq_output=$(yq eval -o=json '.projects_path' "$cfg" 2>&1); then
+            die "Failed to parse configuration file: $cfg (invalid YAML syntax)"
+        fi
+        
+        # Check if projects_path exists and is an array
+        if [[ $yq_output == "null" ]]; then
+            # No projects_path configured, cache empty result
+            _WORKON_CONFIG_CACHE=""
+            _WORKON_CONFIG_MTIME="$current_mtime"
+            return 0
         fi
         
         local jq_output
-        jq_output=$(printf '%s' "$yq_output" | jq -r '.[]' 2>/dev/null)
-        if [[ $? -ne 0 ]]; then
-            die "Failed to parse JSON output from yq with jq"
+        if ! jq_output=$(printf '%s' "$yq_output" | jq -r '.[]' 2>&1); then
+            die "Invalid projects_path format in config file: $cfg (must be an array of strings)"
         fi
+        
+        # Cache the result
+        _WORKON_CONFIG_CACHE="$jq_output"
+        _WORKON_CONFIG_MTIME="$current_mtime"
         
         printf '%s' "$jq_output"
     fi
@@ -49,12 +77,24 @@ find_manifest() {
         done
     else
         local project_name="$target"
+        
+        # Validate project name to prevent path traversal attacks
+        if [[ ! $project_name =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            die "Invalid project name: '$project_name'. Project names must contain only alphanumeric characters, hyphens, and underscores."
+        fi
+        
         local search_dirs
         search_dirs=$(load_project_dirs)
         if [[ -n $search_dirs ]]; then
             while read -r base; do
                 [[ -z $base ]] && continue
-                local candidate="$base/$project_name/workon.yaml"
+                
+                # Expand tilde and validate directory exists
+                local expanded_base
+                expanded_base=$(eval echo "$base" 2>/dev/null) || continue
+                [[ -d $expanded_base ]] || continue
+                
+                local candidate="$expanded_base/$project_name/workon.yaml"
                 if [[ -f $candidate ]]; then
                     printf '%s' "$(realpath "$candidate")"
                     return 0
