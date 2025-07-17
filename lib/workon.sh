@@ -8,19 +8,49 @@ die() {
     exit 2
 }
 
-# Find workon.yaml by walking up directory tree
+# Load project search directories from environment or config file
+load_project_dirs() {
+    if [[ -n ${WORKON_PROJECTS_PATH:-} ]]; then
+        printf '%s' "$WORKON_PROJECTS_PATH" | tr ':' '\n'
+        return 0
+    fi
+
+    local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/workon/config.yaml"
+    if [[ -f $cfg ]]; then
+        yq eval -o=json '.projects_path' "$cfg" 2>/dev/null | jq -r '.[]' 2>/dev/null
+    fi
+}
+
+# Find workon.yaml by walking up directory tree or searching configured project paths
 find_manifest() {
-    local dir
-    dir=$(realpath "${1:-$PWD}")
-    
-    while [[ $dir != / ]]; do
-        if [[ -f $dir/workon.yaml ]]; then
-            printf '%s/workon.yaml' "$dir"
-            return 0
+    local target="${1:-$PWD}"
+
+    if [[ -d $target || -f $target ]]; then
+        local dir
+        dir=$(realpath "$target")
+        while [[ $dir != / ]]; do
+            if [[ -f $dir/workon.yaml ]]; then
+                printf '%s/workon.yaml' "$dir"
+                return 0
+            fi
+            dir=$(dirname "$dir")
+        done
+    else
+        local project_name="$target"
+        local search_dirs
+        search_dirs=$(load_project_dirs)
+        if [[ -n $search_dirs ]]; then
+            while read -r base; do
+                [[ -z $base ]] && continue
+                local candidate="$base/$project_name/workon.yaml"
+                if [[ -f $candidate ]]; then
+                    printf '%s' "$(realpath "$candidate")"
+                    return 0
+                fi
+            done <<<"$search_dirs"
         fi
-        dir=$(dirname "$dir")
-    done
-    
+    fi
+
     return 1
 }
 

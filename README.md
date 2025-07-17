@@ -129,3 +129,17 @@ git commit --no-verify
 
 This repository includes a vendored copy of `pls-open` in `bin/src/pls-open` for convenience. This ensures the tool is available even if not installed system-wide during early development phases.
 
+
+## Global project directories
+
+WorkOn can locate project manifests outside the current directory. Set the `WORKON_PROJECTS_PATH` environment variable to a colon-separated list of directories containing projects. When running `workon <name>` and `<name>` is not a path, each directory is searched for `<name>/workon.yaml`.
+
+Alternatively place a configuration file at `~/.config/workon/config.yaml`:
+
+```yaml
+projects_path:
+  - ~/projects
+  - ~/experiments
+```
+
+The `projects_path` entries are used when `WORKON_PROJECTS_PATH` is not set.
