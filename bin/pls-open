@@ -71,9 +71,9 @@ resolve_desktop_file() {
 
 # substitute_placeholders <exec-line> <file> <desktop-path>
 substitute_placeholders() {
-    local cmd="$1" file="$2" path="$3", id
+    local cmd="$1" file="$2" path="$3" id
 
-    id=$(basename path .txt)
+    id=$(basename "$path" .desktop)
 
     cmd=${cmd//%[fFuU]/$file}
     cmd=${cmd//%c/$id}
@@ -110,13 +110,7 @@ if [[ $# -eq 0 && ( $first_arg == *://* || -e $first_arg || $first_arg == */* ) 
     needs_terminal="false"
 
     mime_type="$(xdg-mime query filetype "$first_arg" 2>/dev/null)"
-    if [[ -z $mime_type ]]; then
-        die "Cannot determine MIME type for '$first_arg'"
-    fi
     default_app="$(xdg-mime query default "$mime_type" 2>/dev/null)"
-    if [[ -z $default_app ]]; then
-        die "No default application for MIME type '$mime_type'"
-    fi
     desktop_file="$(resolve_desktop_file "$default_app")"
     target_file="$first_arg"
 else
@@ -134,13 +128,14 @@ else
 fi
 
 
+if [ -n "$desktop_file" ]; then
+  exec_line="$(get_value Exec "$desktop_file")"
+  [[ -z $exec_line ]] && die "No Exec entry in $desktop_file"
 
-exec_line="$(get_value Exec "$desktop_file")"
-[[ -z $exec_line ]] && die "No Exec entry in $desktop_file"
+  needs_terminal="$(get_value Terminal "$desktop_file" | tr '[:upper:]' '[:lower:]')"
+  cmd="$(substitute_placeholders "$exec_line" "$target_file" "$desktop_file")"
+fi
 
-needs_terminal="$(get_value Terminal "$desktop_file" | tr '[:upper:]' '[:lower:]')"
-
-cmd="$(substitute_placeholders "$exec_line" "$target_file" "$desktop_file")"
 
 # ---------- handle flags that depend on desktop entry ------------------------
 if [[ $needs_terminal != "true" && $KEEP_OPEN == true ]]; then
