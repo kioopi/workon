@@ -10,6 +10,8 @@ source "$SCRIPT_DIR/config.sh"
 source "$SCRIPT_DIR/manifest.sh"
 # shellcheck source=lib/template.sh disable=SC1091
 source "$SCRIPT_DIR/template.sh"
+# shellcheck source=lib/path.sh disable=SC1091
+source "$SCRIPT_DIR/path.sh"
 
 # Backward compatibility aliases for config functions
 die() { config_die "$@"; }
@@ -17,6 +19,11 @@ die() { config_die "$@"; }
 load_project_dirs() { config_load_project_dirs "$@"; }
 find_manifest() { manifest_find "$@"; }
 render_template() { template_render "$@"; }
+expand_relative_paths() { path_expand_relative "$@"; }
+expand_word_if_path() { path_expand_word_if_path "$@"; }
+should_expand_as_path() { path_should_expand_as_path "$@"; }
+expand_to_absolute_path() { path_expand_to_absolute "$@"; }
+resource_exists() { path_resource_exists "$@"; }
 
 # Launch a resource via awesome-client with proper escaping
 launch_resource() {
@@ -397,146 +404,9 @@ get_valid_session_data() {
     printf '%s' "$session_data"
 }
 
-# Check if a file or command exists
-resource_exists() {
-    local path="$1"
-    
-    # Check if it's a file first
-    if [[ -f "$path" ]]; then
-        printf "Yes (file)"
-        return 0
-    fi
-    
-    # Check if it's a command (first word)
-    local first_word
-    first_word=$(printf '%s' "$path" | awk '{print $1}')
-    if command -v "$first_word" >/dev/null 2>&1; then
-        printf "Yes (command)"
-        return 0
-    fi
-    
-    printf "No"
-    return 1
-}
 
 # ─── Path Expansion Utilities ──────────────────────────────────────────────
-
-# Expand relative paths in a command to absolute paths
-# This function identifies potential file paths and expands them to absolute paths
-# - Preserves URLs (http://, https://, ftp://, etc.)
-# - Preserves absolute paths (starting with /)
-# - Expands relative paths to absolute paths based on current working directory
-expand_relative_paths() {
-    local cmd="$1"
-    local -a words
-    
-    # Use eval to let bash handle quote parsing properly
-    eval "words=($cmd)"
-    
-    local result=""
-    for word in "${words[@]}"; do
-        local expanded_word
-        expanded_word=$(expand_word_if_path "$word")
-        
-        # Use printf %q to properly quote the result
-        result+="$(printf '%q' "$expanded_word") "
-    done
-    
-    # Remove trailing space and output
-    printf '%s' "${result% }"
-}
-
-# Helper function to expand a word if it's a path
-expand_word_if_path() {
-    local word="$1"
-    
-    # Skip URLs (contain :// or start with known protocols)
-    if [[ $word =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:// ]]; then
-        printf '%s' "$word"
-        return
-    fi
-    
-    # Skip absolute paths (start with /)
-    if [[ $word == /* ]]; then
-        printf '%s' "$word"
-        return
-    fi
-    
-    # Skip if it looks like a command flag (starts with -)
-    if [[ $word == -* ]]; then
-        printf '%s' "$word"
-        return
-    fi
-    
-    # Skip if it's just a single dot (current directory)
-    if [[ $word == "." ]]; then
-        printf '%s' "$word"
-        return
-    fi
-    
-    # Check if it's a command in PATH first
-    if command -v "$word" >/dev/null 2>&1; then
-        # It's a command in PATH, don't expand it
-        printf '%s' "$word"
-        return
-    fi
-    
-    # Handle special patterns like "file=@path" or "option=path"
-    if [[ $word == *=@* ]]; then
-        local prefix="${word%%=@*}"
-        local suffix="${word#*=@}"
-        if should_expand_as_path "$suffix"; then
-            printf '%s=@%s' "$prefix" "$(expand_to_absolute_path "$suffix")"
-            return
-        fi
-    elif [[ $word == *=* ]]; then
-        local prefix="${word%%=*}"
-        local suffix="${word#*=}"
-        if should_expand_as_path "$suffix"; then
-            printf '%s=%s' "$prefix" "$(expand_to_absolute_path "$suffix")"
-            return
-        fi
-    fi
-    
-    # Check if word looks like a relative path
-    if should_expand_as_path "$word"; then
-        # Convert to absolute path
-        expand_to_absolute_path "$word"
-        return
-    fi
-    
-    # Not a path, keep as-is
-    printf '%s' "$word"
-}
-
-# Helper function to determine if a word should be expanded as a path
-should_expand_as_path() {
-    local word="$1"
-    
-    # Expand if contains / (subdirectory) or if file/directory exists
-    [[ $word == */* ]] || [[ -e $word ]]
-}
-
-# Helper function to expand a path to absolute, with fallback for portability
-expand_to_absolute_path() {
-    local path="$1"
-    
-    if [[ -e "$path" ]]; then
-        # File exists, use realpath
-        realpath "$path"
-    else
-        # File doesn't exist, try realpath with --canonicalize-missing first
-        if realpath --canonicalize-missing "$path" 2>/dev/null; then
-            return 0
-        elif readlink -f "$path" 2>/dev/null; then
-            # Fallback to readlink -f if available
-            return 0
-        else
-            # Neither available, construct manually
-            printf '%s/%s' "$PWD" "$path"
-        fi
-    fi
-}
+# Functions moved to lib/path.sh
 
 # ─── Template Processing Utilities ─────────────────────────────────────────
 
