@@ -405,15 +405,23 @@ Update existing documentation:
 - **Tests**: 15/15 passing in test/unit/spawn.bats
 - **TDD Cycle**: RED → GREEN → REFACTOR ✓
 
-**lib/cleanup.sh** - *Next Target*
+**lib/cleanup.sh (155 lines)** - *Completed*
 - **Functions**: `cleanup_stop_by_pid()`, `cleanup_stop_by_xdotool()`, `cleanup_stop_by_wmctrl()`, `cleanup_stop_resource()`, `cleanup_stop_session()`
-- **Responsibilities**: Multi-strategy resource cleanup and session teardown
+- **Responsibilities**: Multi-strategy resource cleanup, session teardown, graceful process termination
+- **Tests**: 24/24 passing in test/unit/cleanup.bats
+- **TDD Cycle**: RED → GREEN → REFACTOR ✓
+
+### 🚧 **Phase 3: Advanced Logic Modules** (Next Phase)
+
+**lib/commands/*.sh** - *Next Target*
+- **Functions**: Command implementations for `info`, `validate`, `resolve` subcommands
+- **Responsibilities**: Isolated subcommand implementations with consistent output formatting
 
 ### 📊 **Current Metrics**
 
-- **Lines Extracted**: 735 lines from 1,146-line monolith (64% reduction)
+- **Lines Extracted**: 880 lines from 1,146-line monolith (77% reduction)
 - **Modules Created**: 6/8 planned modules
-- **Test Coverage**: 95 new focused tests added (9 config + 12 manifest + 17 template + 26 path + 16 session + 15 spawn)
+- **Test Coverage**: 119 new focused tests added (9 config + 12 manifest + 17 template + 26 path + 16 session + 15 spawn + 24 cleanup)
 - **Regression Tests**: All existing tests passing (100%)
 - **Code Quality**: All shellcheck warnings resolved
 
