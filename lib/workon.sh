@@ -8,22 +8,15 @@ SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 source "$SCRIPT_DIR/config.sh"
 # shellcheck source=lib/manifest.sh disable=SC1091
 source "$SCRIPT_DIR/manifest.sh"
+# shellcheck source=lib/template.sh disable=SC1091
+source "$SCRIPT_DIR/template.sh"
 
 # Backward compatibility aliases for config functions
 die() { config_die "$@"; }
 
 load_project_dirs() { config_load_project_dirs "$@"; }
 find_manifest() { manifest_find "$@"; }
-
-# Expand {{VAR}} and {{VAR:-default}} templates using environment variables
-render_template() {
-    local input="$1"
-    # Convert {{VAR}} and {{VAR:-default}} to ${VAR} and ${VAR:-default} format
-    local converted
-    converted=$(printf '%s' "$input" | sed -E 's/\{\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}\}/${\1\2}/g')
-    # Use bash parameter expansion (temporarily disable -u for undefined vars)
-    (set +u; eval "printf '%s' \"$converted\"")
-}
+render_template() { template_render "$@"; }
 
 # Launch a resource via awesome-client with proper escaping
 launch_resource() {
@@ -547,66 +540,9 @@ expand_to_absolute_path() {
 
 # ─── Template Processing Utilities ─────────────────────────────────────────
 
-# Process template variables and show analysis
-process_template_variables() {
-    local text="$1"
-    local template_vars
-    
-    template_vars=$(extract_template_variables "$text")
-    
-    if [[ -n $template_vars ]]; then
-        printf "Found\n"
-        while IFS= read -r var; do
-            if [[ -n $var ]]; then
-                printf "  • %s\n" "$var"
-            fi
-        done <<<"$template_vars"
-        return 0
-    else
-        printf "None\n"
-        return 1
-    fi
-}
+process_template_variables() { template_process_variables "$@"; }
 
-# Show template variable analysis with environment values
-show_template_analysis() {
-    local text="$1"
-    local template_vars
-    
-    template_vars=$(extract_template_variables "$text")
-    
-    if [[ -n $template_vars ]]; then
-        printf "🔧 Template variables: "
-        local var_count=0
-        while IFS= read -r var; do
-            if [[ -n $var ]]; then
-                if [[ $var_count -eq 0 ]]; then
-                    printf "%s" "$var"
-                else
-                    printf ", %s" "$var"
-                fi
-                var_count=$((var_count + 1))
-            fi
-        done <<<"$template_vars"
-        printf "\n"
-        
-        # Show environment variable values
-        printf "🌍 Environment variables:\n"
-        while IFS= read -r var; do
-            if [[ -n $var ]]; then
-                # Extract just the variable name (without {{}} and default)
-                local var_name
-                var_name=$(printf '%s' "$var" | sed 's/{{//g; s/}}//g; s/:-.*//')
-                local var_value="${!var_name:-<unset>}"
-                printf "  • %s=%s\n" "$var_name" "$var_value"
-            fi
-        done <<<"$template_vars"
-        return 0
-    else
-        printf "🔧 Template variables: None\n"
-        return 1
-    fi
-}
+show_template_analysis() { template_analyze "$@"; }
 
 # ─── Debug Command Functions ────────────────────────────────────────────────
 
@@ -772,12 +708,7 @@ workon_info() {
     esac
 }
 
-# Extract template variables from a string
-extract_template_variables() {
-    local input="$1"
-    # Find all {{VAR}} and {{VAR:-default}} patterns
-    printf '%s' "$input" | grep -oE '\{\{[A-Za-z_][A-Za-z0-9_]*(:[-][^}]*)?\}\}' | sort | uniq || true
-}
+extract_template_variables() { template_extract_variables "$@"; }
 
 # Validate YAML syntax and print status
 validate_manifest_syntax() {

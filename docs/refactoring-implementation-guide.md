@@ -381,11 +381,13 @@ Update existing documentation:
 
 ### 🚧 **Phase 2: Core Logic Modules** (In Progress)
 
-**lib/template.sh** - *Next Target*
+**lib/template.sh (75 lines)** - *Completed*
 - **Functions**: `template_render()`, `template_extract_variables()`, `template_analyze()`, `template_process_variables()`
-- **Responsibilities**: Template variable processing and environment expansion
+- **Responsibilities**: Template variable processing, environment expansion, debugging analysis
+- **Tests**: 17/17 passing in test/unit/template.bats
+- **TDD Cycle**: RED → GREEN → REFACTOR ✓
 
-**lib/path.sh** - *Planned*
+**lib/path.sh** - *Next Target*
 - **Functions**: `path_expand_relative()`, `path_expand_word_if_path()`, `path_should_expand_as_path()`, `path_expand_to_absolute()`, `path_resource_exists()`
 - **Responsibilities**: Path manipulation, expansion, and validation utilities
 
@@ -395,9 +397,9 @@ Update existing documentation:
 
 ### 📊 **Current Metrics**
 
-- **Lines Extracted**: 195 lines from 1,146-line monolith (17% reduction)
-- **Modules Created**: 2/8 planned modules
-- **Test Coverage**: 21 new focused tests added
+- **Lines Extracted**: 284 lines from 1,146-line monolith (25% reduction)
+- **Modules Created**: 3/8 planned modules
+- **Test Coverage**: 38 new focused tests added (9 config + 12 manifest + 17 template)
 - **Regression Tests**: 47/47 passing (100%)
 - **Code Quality**: All shellcheck warnings resolved
 
@@ -412,7 +414,7 @@ Update existing documentation:
 
 ### Code Quality Requirements
 
-- [x] Each module under 300 lines (config: 86, manifest: 109)
+- [x] Each module under 300 lines (config: 86, manifest: 109, template: 75)
 - [x] Clear separation of concerns with single responsibility per module
 - [x] Consistent naming conventions with module prefixes
 - [x] Comprehensive error handling with helpful messages
