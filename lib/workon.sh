@@ -2,109 +2,18 @@
 # WorkOn Library Functions
 # Shared functions for workon CLI tool
 
-# Print error message and exit
-die() {
-    printf 'workon: %s\n' "$*" >&2
-    exit 2
-}
+# Source modular components
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+# shellcheck source=lib/config.sh disable=SC1091
+source "$SCRIPT_DIR/config.sh"
+# shellcheck source=lib/manifest.sh disable=SC1091
+source "$SCRIPT_DIR/manifest.sh"
 
-# Config cache variables
-declare -g _WORKON_CONFIG_CACHE=""
-declare -g _WORKON_CONFIG_MTIME=""
+# Backward compatibility aliases for config functions
+die() { config_die "$@"; }
 
-# Load project search directories from environment or config file
-load_project_dirs() {
-    if [[ -n ${WORKON_PROJECTS_PATH:-} ]]; then
-        printf '%s' "$WORKON_PROJECTS_PATH" | tr ':' '\n'
-        return 0
-    fi
-
-    local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/workon/config.yaml"
-    if [[ -f $cfg ]]; then
-        # Check if config file is readable
-        if [[ ! -r $cfg ]]; then
-            die "Configuration file is not readable: $cfg"
-        fi
-        
-        # Check cache validity
-        local current_mtime
-        current_mtime=$(stat -c %Y "$cfg" 2>/dev/null) || current_mtime=0
-        
-        if [[ -n $_WORKON_CONFIG_CACHE && $_WORKON_CONFIG_MTIME == "$current_mtime" ]]; then
-            printf '%s' "$_WORKON_CONFIG_CACHE"
-            return 0
-        fi
-        
-        local yq_output
-        if ! yq_output=$(yq eval -o=json '.projects_path' "$cfg" 2>&1); then
-            die "Failed to parse configuration file: $cfg (invalid YAML syntax)"
-        fi
-        
-        # Check if projects_path exists and is an array
-        if [[ $yq_output == "null" ]]; then
-            # No projects_path configured, cache empty result
-            _WORKON_CONFIG_CACHE=""
-            _WORKON_CONFIG_MTIME="$current_mtime"
-            return 0
-        fi
-        
-        local jq_output
-        if ! jq_output=$(printf '%s' "$yq_output" | jq -r '.[]' 2>&1); then
-            die "Invalid projects_path format in config file: $cfg (must be an array of strings)"
-        fi
-        
-        # Cache the result
-        _WORKON_CONFIG_CACHE="$jq_output"
-        _WORKON_CONFIG_MTIME="$current_mtime"
-        
-        printf '%s' "$jq_output"
-    fi
-}
-
-# Find workon.yaml by walking up directory tree or searching configured project paths
-find_manifest() {
-    local target="${1:-$PWD}"
-
-    if [[ -d $target || -f $target ]]; then
-        local dir
-        dir=$(realpath "$target")
-        while [[ $dir != / ]]; do
-            if [[ -f $dir/workon.yaml ]]; then
-                printf '%s/workon.yaml' "$dir"
-                return 0
-            fi
-            dir=$(dirname "$dir")
-        done
-    else
-        local project_name="$target"
-        
-        # Validate project name to prevent path traversal attacks
-        if [[ ! $project_name =~ ^[a-zA-Z0-9_-]+$ ]]; then
-            die "Invalid project name: '$project_name'. Project names must contain only alphanumeric characters, hyphens, and underscores."
-        fi
-        
-        local search_dirs
-        search_dirs=$(load_project_dirs)
-        if [[ -n $search_dirs ]]; then
-            while read -r base; do
-                [[ -z $base ]] && continue
-                
-                # Expand tilde and validate directory exists
-                local expanded_base
-                expanded_base=$(eval echo "$base" 2>/dev/null) || continue
-                [[ -d $expanded_base ]] || continue
-                
-                local candidate="$expanded_base/$project_name/workon.yaml"
-                if [[ -f $candidate ]]; then
-                    printf '%s' "$(realpath "$candidate")"
-                    return 0
-                fi
-            done <<<"$search_dirs"
-        fi
-    fi
-
-    return 1
-}
+load_project_dirs() { config_load_project_dirs "$@"; }
+find_manifest() { manifest_find "$@"; }
 
 # Expand {{VAR}} and {{VAR:-default}} templates using environment variables
 render_template() {
@@ -243,55 +152,14 @@ launch_all_resources_with_session() {
 
 # Legacy functions removed - session entries are now created by Lua script
 
-# Parse and validate manifest JSON
-parse_manifest() {
-    local manifest="$1"
-    local manifest_json
-    
-    # Parse YAML to JSON
-    if ! manifest_json=$(yq eval -o=json '.' "$manifest" 2>/dev/null); then
-        die "Failed to parse $manifest (check YAML syntax)"
-    fi
-    
-    # Validate structure
-    if ! jq -e '.resources' <<<"$manifest_json" >/dev/null 2>&1; then
-        die "Invalid manifest: missing 'resources' section"
-    fi
-    
-    # Check if resources is empty
-    local resource_count
-    resource_count=$(jq -r '.resources | length' <<<"$manifest_json" 2>/dev/null)
-    if [[ "$resource_count" == "0" ]] || [[ "$resource_count" == "null" ]]; then
-        die "No resources defined in manifest"
-    fi
-    
-    printf '%s' "$manifest_json"
-}
+parse_manifest() { manifest_parse "$@"; }
 
-# Extract resources from manifest JSON
-extract_resources() {
-    local manifest_json="$1"
-    
-    if ! jq -r '.resources | to_entries[] | @base64' <<<"$manifest_json" 2>/dev/null; then
-        die "Failed to extract resources from manifest"
-    fi
-}
+extract_resources() { manifest_extract_resources "$@"; }
 
 # ─── Session Management Functions ───────────────────────────────────────────
 
-# Get the cache directory following XDG spec
-cache_dir() {
-    printf '%s/workon' "${XDG_CACHE_HOME:-$HOME/.cache}"
-}
-
-# Generate session file path for a project directory
-cache_file() {
-    local project_root
-    project_root=$(realpath "${1:-$PWD}")
-    local sha1
-    sha1=$(printf '%s' "$project_root" | sha1sum | cut -d' ' -f1)
-    printf '%s/%s.json' "$(cache_dir)" "$sha1"
-}
+cache_dir() { config_cache_dir; }
+cache_file() { config_cache_file "$@"; }
 
 # Execute command with file lock protection
 with_lock() {
@@ -479,21 +347,7 @@ stop_session_impl() {
     return 0
 }
 
-# Check dependencies are available
-check_dependencies() {
-    local missing=()
-    
-    command -v yq >/dev/null || missing+=(yq)
-    command -v jq >/dev/null || missing+=(jq)
-    command -v awesome-client >/dev/null || missing+=(awesome-client)
-    command -v realpath >/dev/null || missing+=(realpath)
-    command -v sha1sum >/dev/null || missing+=(sha1sum)
-    command -v flock >/dev/null || missing+=(flock)
-    
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        die "Missing required dependencies: ${missing[*]}"
-    fi
-}
+check_dependencies() { config_check_dependencies "$@"; }
 
 # ─── Utility Functions ──────────────────────────────────────────────────────
 
