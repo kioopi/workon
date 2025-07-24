@@ -393,15 +393,21 @@ Update existing documentation:
 - **Tests**: 26/26 passing in test/unit/path.bats
 - **TDD Cycle**: RED → GREEN → REFACTOR ✓
 
-**lib/session.sh** - *Next Target*
+**lib/session.sh (101 lines)** - *Completed*
 - **Functions**: `session_read()`, `session_write_atomic()`, `session_with_lock()`, `session_get_valid_data()`
-- **Responsibilities**: Session file operations, atomic writes, and file locking
+- **Responsibilities**: Session file operations, atomic writes, file locking, data validation
+- **Tests**: 16/16 passing in test/unit/session.bats
+- **TDD Cycle**: RED → GREEN → REFACTOR ✓
+
+**lib/spawn.sh** - *Next Target*
+- **Functions**: `spawn_launch_all_resources()`, `spawn_prepare_resources_json()`, `spawn_execute_lua_script()`, `spawn_wait_for_session_update()`
+- **Responsibilities**: Resource spawning coordination and Lua script integration
 
 ### 📊 **Current Metrics**
 
-- **Lines Extracted**: 465 lines from 1,146-line monolith (41% reduction)
-- **Modules Created**: 4/8 planned modules
-- **Test Coverage**: 64 new focused tests added (9 config + 12 manifest + 17 template + 26 path)
+- **Lines Extracted**: 566 lines from 1,146-line monolith (49% reduction)
+- **Modules Created**: 5/8 planned modules
+- **Test Coverage**: 80 new focused tests added (9 config + 12 manifest + 17 template + 26 path + 16 session)
 - **Regression Tests**: All existing tests passing (100%)
 - **Code Quality**: All shellcheck warnings resolved
 

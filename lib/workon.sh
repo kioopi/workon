@@ -12,6 +12,8 @@ source "$SCRIPT_DIR/manifest.sh"
 source "$SCRIPT_DIR/template.sh"
 # shellcheck source=lib/path.sh disable=SC1091
 source "$SCRIPT_DIR/path.sh"
+# shellcheck source=lib/session.sh disable=SC1091
+source "$SCRIPT_DIR/session.sh"
 
 # Backward compatibility aliases for config functions
 die() { config_die "$@"; }
@@ -161,42 +163,7 @@ extract_resources() { manifest_extract_resources "$@"; }
 cache_dir() { config_cache_dir; }
 cache_file() { config_cache_file "$@"; }
 
-# Execute command with file lock protection
-with_lock() {
-    local lock_file="$1"
-    shift
-    local cache_dir_path
-    cache_dir_path=$(dirname "$lock_file")
-
-    # Ensure cache directory exists
-    mkdir -p "$cache_dir_path" || die "Cannot create cache directory: $cache_dir_path"
-    
-    # Use flock with file descriptor 200
-    {
-        flock -n 200 || die "Session file busy (another workon process may be running)"
-        "$@"
-    } 200>"${lock_file}.lock"
-}
-
-# Legacy json_append function removed - session files are now written by Lua script
-
-# Validate and read session file
-read_session() {
-    local session_file="$1"
-    
-    if [[ ! -f $session_file ]]; then
-        return 1
-    fi
-    
-    # Validate JSON format
-    if ! jq -e 'type == "array"' "$session_file" >/dev/null 2>&1; then
-        printf 'Warning: Corrupted session file, removing: %s\n' "$session_file" >&2
-        rm -f "$session_file"
-        return 1
-    fi
-    
-    cat "$session_file"
-}
+# Session functions moved to lib/session.sh
 
 # ─── Cleanup Strategy Functions ────────────────────────────────────────────
 
@@ -388,21 +355,7 @@ parse_resource_entry() {
     printf '%s\t%s' "$name" "$cmd"
 }
 
-# Get valid session data with error handling
-get_valid_session_data() {
-    local session_file="$1"
-    
-    if [[ ! -f "$session_file" ]]; then
-        return 1
-    fi
-    
-    local session_data
-    if ! session_data=$(read_session "$session_file"); then
-        return 1
-    fi
-    
-    printf '%s' "$session_data"
-}
+# Session functions moved to lib/session.sh
 
 
 # ─── Path Expansion Utilities ──────────────────────────────────────────────
