@@ -14,6 +14,7 @@
 #   manifest_validate_syntax() - Check YAML syntax without full parsing
 #   manifest_validate_structure() - Validate required manifest sections
 #   manifest_extract_resources() - Extract resource definitions as base64 entries
+#   manifest_extract_layout() - Extract layout configuration with validation
 
 # Source config module for project directory loading
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
@@ -138,4 +139,71 @@ manifest_extract_resources() {
     if ! jq -r '.resources | to_entries[] | @base64' <<<"$manifest_json" 2>/dev/null; then
         config_die "Failed to extract resources from manifest"
     fi
+}
+
+# Extract layout configuration from manifest JSON
+# Returns JSON array where each element represents a tag with its resources
+# If no layouts are defined, returns empty string (falls back to current behavior)
+# Usage: layout=$(manifest_extract_layout "$manifest_json" "desktop")
+manifest_extract_layout() {
+    local manifest_json="$1"
+    local layout_name="${2:-}"
+    
+    # Check if layouts section exists
+    if ! jq -e '.layouts' <<<"$manifest_json" >/dev/null 2>&1; then
+        # No layouts defined - return empty to maintain backward compatibility
+        return 0
+    fi
+    
+    # If no layout name provided, try to use default_layout
+    if [[ -z $layout_name ]]; then
+        layout_name=$(jq -r '.default_layout // empty' <<<"$manifest_json" 2>/dev/null)
+        if [[ -z $layout_name || $layout_name == "null" ]]; then
+            # No default layout - return empty to maintain backward compatibility
+            return 0
+        fi
+    fi
+    
+    # Validate that the requested layout exists
+    if ! jq -e --arg layout "$layout_name" '.layouts[$layout]' <<<"$manifest_json" >/dev/null 2>&1; then
+        config_die "Layout '$layout_name' not found in manifest"
+    fi
+    
+    # Extract the layout array and validate structure
+    local layout_json
+    if ! layout_json=$(jq -c --arg layout "$layout_name" '.layouts[$layout]' <<<"$manifest_json" 2>/dev/null); then
+        config_die "Failed to extract layout '$layout_name'"
+    fi
+    
+    # Validate that layout is an array
+    if ! jq -e 'type == "array"' <<<"$layout_json" >/dev/null 2>&1; then
+        config_die "Layout '$layout_name' must be an array of resource groups"
+    fi
+    
+    # Validate row count (max 9 tags for AwesomeWM)
+    local row_count
+    row_count=$(jq 'length' <<<"$layout_json" 2>/dev/null)
+    if [[ "$row_count" -gt 9 ]]; then
+        config_die "Layout '$layout_name' has $row_count rows, but maximum is 9 (AwesomeWM tag limit)"
+    fi
+    
+    # Validate that all referenced resources exist
+    local resources_json
+    resources_json=$(jq -c '.resources | keys' <<<"$manifest_json" 2>/dev/null)
+    
+    while IFS= read -r row_json; do
+        [[ -z $row_json ]] && continue
+        
+        # Check each resource in the row
+        while IFS= read -r resource; do
+            [[ -z $resource || $resource == "null" ]] && continue
+            
+            if ! jq -e --arg res "$resource" '. | contains([$res])' <<<"$resources_json" >/dev/null 2>&1; then
+                config_die "Layout '$layout_name' references undefined resource: '$resource'"
+            fi
+        done < <(jq -r '.[]' <<<"$row_json" 2>/dev/null)
+    done < <(jq -c '.[]' <<<"$layout_json" 2>/dev/null)
+    
+    # Return the validated layout
+    printf '%s' "$layout_json"
 }

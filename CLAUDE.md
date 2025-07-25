@@ -146,24 +146,27 @@ All bash scripts use `set -euo pipefail` for strict error handling.
 - Uses XDG cache directory for session files
 - Integrates with desktop entry system via `pls-open`
 
-## Current Status (Phase 2 Complete)
+## Current Status (Phase 3 Complete)
 
-**WorkOn is now fully functional with session management!**
+**WorkOn now supports complete layout-based workspace management!**
 
 ### ✅ **Completed Phases:**
 - **Phase 0**: Bootstrap infrastructure, documentation, CI/CD
 - **Phase 1**: Basic start-only functionality with YAML parsing and resource spawning
 - **Phase 2**: Complete session tracking and stop functionality with robust PID management
+- **Phase 3**: Layout support with tag-based resource distribution and comprehensive validation
 
-### 🚀 **Current Capabilities:**
-- Start workspaces from `workon.yaml` manifests
+### 🚀 **Enhanced Capabilities:**
+- Start workspaces from `workon.yaml` manifests with layout support
 - Template expansion with `{{VAR}}` syntax
 - Session tracking with real PID capture
 - Robust stop functionality with multi-strategy cleanup
-- Comprehensive error handling and recovery
-- 59 automated tests with extensive mocking
+- **Layout-based spawning**: Resources distributed across AwesomeWM tags per layout configuration
+- **Multiple layout support**: Named layouts with `default_layout` fallback
+- **Comprehensive validation**: Layout references, resource existence, and tag limits
+- **Backward compatibility**: Projects without layouts work unchanged
+- **Enhanced testing**: 70+ automated tests with comprehensive coverage
 
-### ⭐ **Next Step: Phase 3** - Layout Support
-- Parse `default_layout` from YAML
-- Spawn resources on specific AwesomeWM tags
-- Distribute resources across multiple tags (tags[1], tags[2], etc.)
+### 🎯 **Next Step: Phase 4** - Multiple Layout Choice
+- CLI flag `--layout <name>` for selecting specific layouts
+- Interactive layout picker (future enhancement)

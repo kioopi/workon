@@ -13,6 +13,7 @@
 #   validate_structure() - Validate manifest structure and content
 #   validate_show_resources() - Display resources from manifest
 #   validate_show_templates() - Show template variables in manifest
+#   validate_show_layouts() - Display layout information and validation
 #   validate_manifest() - Main validation function with complete analysis
 
 set -euo pipefail
@@ -129,6 +130,57 @@ validate_process_template_variables() {
     fi
 }
 
+# Show layout information and validation
+validate_show_layouts() {
+    local manifest_json="$1"
+    
+    # Check if layouts section exists
+    if ! jq -e '.layouts' <<<"$manifest_json" >/dev/null 2>&1; then
+        printf "\n🏷️  Layouts: None defined (using sequential spawning)\n"
+        return 0
+    fi
+    
+    local layout_count
+    layout_count=$(jq -r '.layouts | length' <<<"$manifest_json" 2>/dev/null)
+    
+    printf "\n🏷️  Layouts: %s defined\n" "$layout_count"
+    
+    # List all layouts
+    while IFS= read -r layout_entry; do
+        local layout_name row_count
+        layout_name=$(echo "$layout_entry" | jq -r '.key' 2>/dev/null)
+        row_count=$(echo "$layout_entry" | jq -r '.value | length' 2>/dev/null)
+        
+        printf "  • %s: %s tag%s" "$layout_name" "$row_count" "$([ "$row_count" -ne 1 ] && echo "s" || echo "")"
+        
+        # Validate this layout
+        local validation_result
+        if validation_result=$(manifest_extract_layout "$manifest_json" "$layout_name" 2>&1); then
+            printf " ✅\n"
+        else
+            printf " ❌\n"
+            printf "    Error: %s\n" "$validation_result"
+        fi
+    done < <(jq -c '.layouts | to_entries[]' <<<"$manifest_json" 2>/dev/null)
+    
+    # Check default_layout
+    local default_layout
+    default_layout=$(jq -r '.default_layout // empty' <<<"$manifest_json" 2>/dev/null)
+    
+    if [[ -n $default_layout && $default_layout != "null" ]]; then
+        printf "\n🎯 Default Layout: %s" "$default_layout"
+        
+        # Validate default layout exists
+        if jq -e --arg layout "$default_layout" '.layouts[$layout]' <<<"$manifest_json" >/dev/null 2>&1; then
+            printf " ✅\n"
+        else
+            printf " ❌ (layout not found)\n"
+        fi
+    else
+        printf "\n🎯 Default Layout: None specified\n"
+    fi
+}
+
 # Validate workon.yaml manifest file
 validate_manifest() {
     local project_path="${1:-$PWD}"
@@ -171,6 +223,9 @@ validate_manifest() {
     
     # Show template variables
     validate_show_templates "$manifest_json"
+    
+    # Show layout information and validation
+    validate_show_layouts "$manifest_json"
     
     printf "\n✅ Valid manifest - ready to use!\n"
     return 0
