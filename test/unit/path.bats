@@ -214,3 +214,31 @@ teardown() {
     [ "$status" -eq 1 ]
     [ "$output" = "No" ]
 }
+
+@test "path_resource_exists: returns Yes (URL) for https URL" {
+        
+    run path_resource_exists "https://example.com"
+    [ "$status" -eq 0 ]
+    [ "$output" = "Yes (URL)" ]
+}
+
+@test "path_resource_exists: returns Yes (URL) for http URL" {
+        
+    run path_resource_exists "http://localhost:3000"
+    [ "$status" -eq 0 ]
+    [ "$output" = "Yes (URL)" ]
+}
+
+@test "path_resource_exists: returns Yes (URL) for ftp URL" {
+        
+    run path_resource_exists "ftp://ftp.example.com/file.txt"
+    [ "$status" -eq 0 ]
+    [ "$output" = "Yes (URL)" ]
+}
+
+@test "path_resource_exists: returns Yes (URL) for file URL" {
+        
+    run path_resource_exists "file:///path/to/file.html"
+    [ "$status" -eq 0 ]
+    [ "$output" = "Yes (URL)" ]
+}

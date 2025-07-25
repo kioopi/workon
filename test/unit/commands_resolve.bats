@@ -228,3 +228,38 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" =~ "✅ Resolved command: pls-open $TEST_DIR/subdir/file.txt" ]]
 }
+
+@test "resolve_resource handles https URLs correctly" {
+    cat > workon.yaml << EOF
+resources:
+  docs: https://awesomewm.org/apidoc/documentation/05-awesomerc.md.html
+EOF
+    
+    run resolve_resource "docs" "$TEST_DIR"
+    
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "📝 Raw command: https://awesomewm.org/apidoc/documentation/05-awesomerc.md.html" ]]
+    [[ "$output" =~ "✅ Resolved command: pls-open https://awesomewm.org/apidoc/documentation/05-awesomerc.md.html" ]]
+    [[ "$output" =~ "📋 File/Command exists: Yes (URL)" ]]
+}
+
+@test "resolve_resource handles http URLs correctly" {
+    cat > workon.yaml << EOF
+resources:
+  local: http://localhost:3000
+EOF
+    
+    run resolve_resource "local" "$TEST_DIR"
+    
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "📝 Raw command: http://localhost:3000" ]]
+    [[ "$output" =~ "✅ Resolved command: pls-open http://localhost:3000" ]]
+    [[ "$output" =~ "📋 File/Command exists: Yes (URL)" ]]
+}
+
+@test "resolve_check_existence shows correct output for URLs without duplication" {
+    run resolve_check_existence "https://example.com"
+    
+    [ "$status" -eq 0 ]
+    [ "$output" = "Yes (URL)" ]
+}

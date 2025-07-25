@@ -7,11 +7,11 @@
 #
 # Behaviour:
 #   • If the first non‑option argument:
-#       – ends with “.desktop” **and** is a readable file → treat it as the
+#       – ends with ".desktop" **and** is a readable file → treat it as the
 #         desktop‑entry path to use.
-#       – contains “://” **or** resolves to an existing path and *no second
-#         argument is given* → delegate straight to `xdg-open`, honouring the
-#         user’s default application.
+#       – contains "://" (URL) → delegate straight to `xdg-open`, honouring the
+#         user's default application.
+#       – resolves to an existing path → delegate to `xdg-open` with MIME handling.
 #   • Otherwise the argument is interpreted as the *desktop‑id* (basename of a
 #     .desktop file) and the optional second parameter is passed to that app.
 #
@@ -26,9 +26,12 @@
 #
 # Examples:
 #   pls-open code index.py        # open with VS Code regardless of default
-#   pls-open index.html           # falls back to `xdg-open index.html`
-#   pls-open ./foo.desktop        # launch using an explicit desktop file
-#
+#   pls-open https://github.com/user/repo    # open URL in default browser
+#   pls-open --dry-run ./foo.desktop         # preview .desktop file execution
+#   pls-open index.html                      # delegate to `xdg-open index.html`
+#   pls-open ftp://ftp.example.com           # open FTP URL
+#   pls-open file:///path/to/file.html       # open local file URL
+# END HELP
 
 set -euo pipefail
 
@@ -38,7 +41,7 @@ XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
 # ---------- helpers ----------------------------------------------------------
-usage() { grep -E "^#( |$)" "$0" | sed 's/^# //' >&2; exit 1; }
+usage() { grep -E "^#( |$)" "$0" | sed '/^# END HELP$/,$d' | sed 's/^# //' >&2; exit 1; }
 
 die()   { printf 'pls-open: %s\n' "$*" >&2; exit 2; }
 
@@ -104,8 +107,24 @@ done
 first_arg="$1"
 shift || true  # leave $@ intact if there were no more params
 
-# single argument that looks like a file or URL → delegate
-if [[ $# -eq 0 && ( $first_arg == *://* || -e $first_arg || $first_arg == */* ) ]]; then
+direct_delegation="false"
+
+# Handle URLs separately from files - URLs should delegate directly to xdg-open
+if [[ $# -eq 0 && $first_arg == *://* ]]; then
+    cmd="xdg-open $first_arg"
+    needs_terminal="false"
+    # For URLs, skip desktop file resolution - xdg-open handles this directly
+    desktop_file=""
+    target_file="$first_arg"
+    direct_delegation="true"
+# explicit .desktop path - handle before general file delegation
+elif [[ -f $first_arg && $first_arg == *.desktop ]]; then
+    desktop_file="$first_arg"
+    desktop_id="${first_arg##*/}"
+    desktop_id="${desktop_id%.desktop}"
+    target_file="${1:-}"
+# single argument that looks like a file → delegate to xdg-open with MIME handling
+elif [[ $# -eq 0 && ( -e $first_arg || $first_arg == */* ) ]]; then
     cmd="xdg-open $first_arg"
     needs_terminal="false"
 
@@ -113,17 +132,11 @@ if [[ $# -eq 0 && ( $first_arg == *://* || -e $first_arg || $first_arg == */* ) 
     default_app="$(xdg-mime query default "$mime_type" 2>/dev/null)"
     desktop_file="$(resolve_desktop_file "$default_app")"
     target_file="$first_arg"
+    direct_delegation="true"
 else
-    # explicit .desktop path
-    if [[ -f $first_arg && $first_arg == *.desktop ]]; then
-        desktop_file="$first_arg"
-        desktop_id="${first_arg##*/}"
-        desktop_id="${desktop_id%.desktop}"
-    else
-      # Otherwise treat first_arg as a desktop‑id
-      desktop_id="$first_arg"
-      desktop_file="$(resolve_desktop_file "$desktop_id.desktop")"
-    fi
+    # Otherwise treat first_arg as a desktop‑id
+    desktop_id="$first_arg"
+    desktop_file="$(resolve_desktop_file "$desktop_id.desktop")"
     target_file="${1:-}"
 fi
 
@@ -145,7 +158,10 @@ fi
 
 # ---------- build the final command array -----------------------------------
 declare -a final_cmd
-if [[ $needs_terminal == "true" ]]; then
+if [[ $direct_delegation == "true" ]]; then
+    # For direct delegation (URLs and files), split command into array properly
+    read -ra final_cmd <<<"$cmd"
+elif [[ $needs_terminal == "true" ]]; then
     if "$KEEP_OPEN"; then
         final_cmd=("$DEFAULT_TERMINAL" -e bash -c "$cmd; exec bash")
     else
@@ -157,7 +173,12 @@ fi
 
 # ---------- dry‑run output ---------------------------------------------------
 if "$DRY_RUN"; then
-    printf '%q ' "${final_cmd[@]}"
+    # Print command array with spaces between elements, no trailing space
+    sep=""
+    for element in "${final_cmd[@]}"; do
+        printf '%s%q' "$sep" "$element"
+        sep=" "
+    done
     printf '\n'
     exit 0
 fi
