@@ -51,9 +51,9 @@ local function spawn_resource(resource, session_file, tag_index)
         local screen = awful.screen.focused()
         if screen and screen.tags and screen.tags[tag_index] then
             spawn_properties.tag = screen.tags[tag_index]
-            io.stderr:write("Spawning " .. resource.name .. " on tag " .. tag_index .. "\n")
+            io.stderr:write(string.format("Spawning %s on tag %d\n", resource.name, tag_index))
         else
-            io.stderr:write("Warning: Tag " .. tag_index .. " not available, spawning on current tag\n")
+            io.stderr:write(string.format("Warning: Tag %d not available, spawning on current tag\n", tag_index))
         end
     end
     
@@ -114,7 +114,7 @@ if config.layout and type(config.layout) == "table" and #config.layout > 0 then
                         end
                     end
                 else
-                    io.stderr:write("Warning: Layout references unknown resource: " .. resource_name .. "\n")
+                    io.stderr:write(string.format("Warning: Layout references unknown resource: %s\n", resource_name))
                 end
             end
         end
