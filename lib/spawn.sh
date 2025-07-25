@@ -66,13 +66,22 @@ spawn_prepare_resources_json() {
 spawn_execute_lua_script() {
     local session_file="$1"
     local resources_json="$2"
+    local layout_json="${3:-}"
     
     # Prepare configuration for Lua script
     local spawn_config
-    spawn_config=$(jq -n \
-        --arg session_file "$session_file" \
-        --argjson resources "$resources_json" \
-        '{session_file: $session_file, resources: $resources}')
+    if [[ -n $layout_json && $layout_json != "null" && $layout_json != "[]" ]]; then
+        spawn_config=$(jq -n \
+            --arg session_file "$session_file" \
+            --argjson resources "$resources_json" \
+            --argjson layout "$layout_json" \
+            '{session_file: $session_file, resources: $resources, layout: $layout}')
+    else
+        spawn_config=$(jq -n \
+            --arg session_file "$session_file" \
+            --argjson resources "$resources_json" \
+            '{session_file: $session_file, resources: $resources}')
+    fi
     
     # Escape the JSON for Lua string literal
     local escaped_config
@@ -117,8 +126,13 @@ spawn_wait_for_session_update() {
 spawn_launch_all_resources() {
     local session_file="$1"
     local resources="$2"  # Base64-encoded resource entries
+    local layout="${3:-}"  # Optional layout JSON
     
-    printf 'Preparing resources for spawning:\n' >&2
+    if [[ -n $layout && $layout != "null" ]]; then
+        printf 'Preparing resources for layout-based spawning:\n' >&2
+    else
+        printf 'Preparing resources for spawning:\n' >&2
+    fi
     
     # Prepare resources JSON with template expansion and path resolution
     local resources_json
@@ -158,7 +172,7 @@ spawn_launch_all_resources() {
     
     # Execute Lua script
     printf 'Executing awesome-client with embedded configuration\n' >&2
-    spawn_execute_lua_script "$session_file" "$resources_json"
+    spawn_execute_lua_script "$session_file" "$resources_json" "$layout"
     
     # Wait for session file update with 15 second timeout
     spawn_wait_for_session_update "$session_file" "$initial_count" 15

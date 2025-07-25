@@ -68,6 +68,10 @@ workon_start() {
     # Extract resources
     local resources
     resources=$(extract_resources "$manifest_json")
+    
+    # Extract layout configuration (optional)
+    local layout=""
+    layout=$(manifest_extract_layout "$manifest_json" || true)
 
     # Change to manifest directory for relative paths
     local manifest_dir
@@ -89,7 +93,7 @@ workon_start() {
     fi
     
     # Launch all resources using single Lua script
-    if launch_all_resources_with_session "$session_file" "$resources"; then
+    if launch_all_resources_with_session "$session_file" "$resources" "$layout"; then
         # Report final status
         if [[ -f "$session_file" ]]; then
             local final_count

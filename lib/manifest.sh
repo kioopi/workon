@@ -14,11 +14,14 @@
 #   manifest_validate_syntax() - Check YAML syntax without full parsing
 #   manifest_validate_structure() - Validate required manifest sections
 #   manifest_extract_resources() - Extract resource definitions as base64 entries
+#   manifest_extract_layout() - Extract layout configuration with validation
 
 # Source config module for project directory loading
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=lib/config.sh disable=SC1091
 source "$SCRIPT_DIR/config.sh"
+# shellcheck source=lib/layout.sh disable=SC1091
+source "$SCRIPT_DIR/layout.sh"
 
 # Find workon.yaml by walking up directory tree or searching configured project paths
 manifest_find() {
@@ -138,4 +141,36 @@ manifest_extract_resources() {
     if ! jq -r '.resources | to_entries[] | @base64' <<<"$manifest_json" 2>/dev/null; then
         config_die "Failed to extract resources from manifest"
     fi
+}
+
+# Extract layout configuration from manifest JSON
+# Returns JSON array where each element represents a tag with its resources
+# If no layouts are defined, returns empty string (falls back to current behavior)
+# Usage: layout=$(manifest_extract_layout "$manifest_json" "desktop")
+manifest_extract_layout() {
+    local manifest_json="$1"
+    local layout_name="${2:-}"
+    
+    # Check if layouts exist using utility
+    if ! layout_exists "$manifest_json"; then
+        # No layouts defined - return empty to maintain backward compatibility
+        return 0
+    fi
+    
+    # Get layout name (use default if not provided)
+    if [[ -z $layout_name ]]; then
+        if ! layout_name=$(layout_get_default "$manifest_json"); then
+            # No default layout - return empty to maintain backward compatibility
+            return 0
+        fi
+    fi
+    
+    # Comprehensive validation using utility
+    local validation_error
+    if ! validation_error=$(layout_validate_comprehensive "$manifest_json" "$layout_name" 2>&1); then
+        config_die "$validation_error"
+    fi
+    
+    # Extract and return validated layout using utility
+    layout_extract_by_name "$manifest_json" "$layout_name"
 }

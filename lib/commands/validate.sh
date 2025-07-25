@@ -13,9 +13,15 @@
 #   validate_structure() - Validate manifest structure and content
 #   validate_show_resources() - Display resources from manifest
 #   validate_show_templates() - Show template variables in manifest
+#   validate_show_layouts() - Display layout information and validation
 #   validate_manifest() - Main validation function with complete analysis
 
 set -euo pipefail
+
+# Source layout utilities
+VALIDATE_SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+# shellcheck source=lib/layout.sh disable=SC1091
+source "$VALIDATE_SCRIPT_DIR/../layout.sh"
 
 # Validate YAML syntax and print status
 validate_syntax() {
@@ -129,6 +135,57 @@ validate_process_template_variables() {
     fi
 }
 
+# Show layout information and validation
+validate_show_layouts() {
+    local manifest_json="$1"
+    
+    # Check if layouts section exists using utility
+    if ! layout_exists "$manifest_json"; then
+        printf "\n🏷️  Layouts: None defined (using sequential spawning)\n"
+        return 0
+    fi
+    
+    # Get layout count using utility
+    local layout_count
+    layout_count=$(layout_get_count "$manifest_json")
+    
+    printf "\n🏷️  Layouts: %s defined\n" "$layout_count"
+    
+    # List all layouts using utility
+    while IFS= read -r layout_name; do
+        # Get layout info and row count
+        local layout_json row_count
+        layout_json=$(layout_extract_by_name "$manifest_json" "$layout_name")
+        row_count=$(layout_get_row_count "$layout_json")
+        
+        printf "  • %s: %s tag%s" "$layout_name" "$row_count" "$([ "$row_count" -ne 1 ] && echo "s" || echo "")"
+        
+        # Validate this layout using comprehensive validation
+        local validation_result
+        if validation_result=$(layout_validate_comprehensive "$manifest_json" "$layout_name" 2>&1); then
+            printf " ✅\n"
+        else
+            printf " ❌\n"
+            printf "    Error: %s\n" "$validation_result"
+        fi
+    done < <(layout_get_all_names "$manifest_json")
+    
+    # Check default_layout using utility
+    local default_layout
+    if default_layout=$(layout_get_default "$manifest_json"); then
+        printf "\n🎯 Default Layout: %s" "$default_layout"
+        
+        # Validate default layout exists using utility
+        if layout_validate_exists "$manifest_json" "$default_layout"; then
+            printf " ✅\n"
+        else
+            printf " ❌ (layout not found)\n"
+        fi
+    else
+        printf "\n🎯 Default Layout: None specified\n"
+    fi
+}
+
 # Validate workon.yaml manifest file
 validate_manifest() {
     local project_path="${1:-$PWD}"
@@ -171,6 +228,9 @@ validate_manifest() {
     
     # Show template variables
     validate_show_templates "$manifest_json"
+    
+    # Show layout information and validation
+    validate_show_layouts "$manifest_json"
     
     printf "\n✅ Valid manifest - ready to use!\n"
     return 0

@@ -42,23 +42,37 @@ if not config.session_file or not config.resources then
     return
 end
 
--- Function to spawn a single resource
-local function spawn_resource(resource, session_file)
+-- Function to spawn a single resource on a specific tag
+local function spawn_resource(resource, session_file, tag_index)
+    local spawn_properties = {}
+    
+    -- If tag_index is specified, spawn on that tag
+    if tag_index and tag_index > 0 then
+        local screen = awful.screen.focused()
+        if screen and screen.tags and screen.tags[tag_index] then
+            spawn_properties.tag = screen.tags[tag_index]
+            io.stderr:write(string.format("Spawning %s on tag %d\n", resource.name, tag_index))
+        else
+            io.stderr:write(string.format("Warning: Tag %d not available, spawning on current tag\n", tag_index))
+        end
+    end
+    
+    -- Add callback for session tracking
+    spawn_properties.callback = function(c)
+        -- Create session entry with client data
+        local entry = session.create_entry(resource.name, resource.cmd, c.pid, c)
+        
+        -- Append to session file
+        local append_success, append_err = pcall(session.append_to_session, session_file, entry)
+        if not append_success then
+            io.stderr:write("Error updating session file: " .. (append_err or "unknown error") .. "\n")
+        else
+            io.stderr:write("Session updated: " .. resource.name .. " (PID: " .. (c.pid or "unknown") .. ")\n")
+        end
+    end
+    
     local success, pid_or_err = pcall(function()
-        return awful.spawn(resource.cmd, {
-            callback = function(c)
-                -- Create session entry with client data
-                local entry = session.create_entry(resource.name, resource.cmd, c.pid, c)
-                
-                -- Append to session file
-                local append_success, append_err = pcall(session.append_to_session, session_file, entry)
-                if not append_success then
-                    io.stderr:write("Error updating session file: " .. (append_err or "unknown error") .. "\n")
-                else
-                    io.stderr:write("Session updated: " .. resource.name .. " (PID: " .. (c.pid or "unknown") .. ")\n")
-                end
-            end
-        })
+        return awful.spawn(resource.cmd, spawn_properties)
     end)
     
     if success then
@@ -70,16 +84,59 @@ local function spawn_resource(resource, session_file)
     end
 end
 
--- Spawn all resources
+-- Spawn all resources based on layout or sequentially
 local success_count = 0
 local total_count = #config.resources
 
-for i, resource in ipairs(config.resources) do
-    if not resource.name or not resource.cmd then
-        io.stderr:write("Warning: Resource " .. i .. " missing name or cmd\n")
-    else
-        if spawn_resource(resource, config.session_file) then
-            success_count = success_count + 1
+-- Check if layout is provided
+if config.layout and type(config.layout) == "table" and #config.layout > 0 then
+    io.stderr:write("Using layout-based spawning with " .. #config.layout .. " tags\n")
+    
+    -- Spawn resources by layout (tag-based)
+    for tag_index, resource_group in ipairs(config.layout) do
+        if type(resource_group) == "table" then
+            for _, resource_name in ipairs(resource_group) do
+                -- Find the resource by name
+                local resource = nil
+                for _, res in ipairs(config.resources) do
+                    if res.name == resource_name then
+                        resource = res
+                        break
+                    end
+                end
+                
+                if resource then
+                    if not resource.name or not resource.cmd then
+                        io.stderr:write("Warning: Resource " .. resource_name .. " missing name or cmd\n")
+                    else
+                        if spawn_resource(resource, config.session_file, tag_index) then
+                            success_count = success_count + 1
+                        end
+                    end
+                else
+                    io.stderr:write(string.format("Warning: Layout references unknown resource: %s\n", resource_name))
+                end
+            end
+        end
+    end
+    
+    total_count = 0
+    for _, group in ipairs(config.layout) do
+        if type(group) == "table" then
+            total_count = total_count + #group
+        end
+    end
+else
+    io.stderr:write("Using sequential spawning (no layout)\n")
+    
+    -- Spawn resources sequentially (backward compatibility)
+    for i, resource in ipairs(config.resources) do
+        if not resource.name or not resource.cmd then
+            io.stderr:write("Warning: Resource " .. i .. " missing name or cmd\n")
+        else
+            if spawn_resource(resource, config.session_file) then
+                success_count = success_count + 1
+            end
         end
     end
 end
