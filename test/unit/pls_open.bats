@@ -161,7 +161,38 @@ EOF
 }
 
 @test "pls-open with file that has URL scheme: delegates to xdg-open" {
-    skip "Requires xdg-open and proper MIME handling - integration test"
+    run "$PROJECT_ROOT/bin/pls-open" --dry-run http://example.com/test.txt
+
+    assert_success
+    assert_output "xdg-open http://example.com/test.txt"
+}
+
+@test "pls-open with https URL: delegates to xdg-open" {
+    run "$PROJECT_ROOT/bin/pls-open" --dry-run https://github.com/user/repo
+
+    assert_success
+    assert_output "xdg-open https://github.com/user/repo"
+}
+
+@test "pls-open with ftp URL: delegates to xdg-open" {
+    run "$PROJECT_ROOT/bin/pls-open" --dry-run ftp://ftp.example.com/file.txt
+
+    assert_success
+    assert_output "xdg-open ftp://ftp.example.com/file.txt"
+}
+
+@test "pls-open with file URL: delegates to xdg-open" {
+    run "$PROJECT_ROOT/bin/pls-open" --dry-run file:///path/to/local/file.html
+
+    assert_success
+    assert_output "xdg-open file:///path/to/local/file.html"
+}
+
+@test "pls-open with URL containing query parameters: delegates to xdg-open" {
+    run "$PROJECT_ROOT/bin/pls-open" --dry-run "https://example.com/search?q=test&type=all"
+
+    assert_success
+    assert_output "xdg-open https://example.com/search\\?q=test\\&type=all"
 }
 
 @test "pls-open with existing file path: delegates to xdg-open" {
