@@ -18,6 +18,11 @@
 
 set -euo pipefail
 
+# Source layout utilities
+VALIDATE_SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+# shellcheck source=lib/layout.sh disable=SC1091
+source "$VALIDATE_SCRIPT_DIR/../layout.sh"
+
 # Validate YAML syntax and print status
 validate_syntax() {
     local manifest="$1"
@@ -134,44 +139,44 @@ validate_process_template_variables() {
 validate_show_layouts() {
     local manifest_json="$1"
     
-    # Check if layouts section exists
-    if ! jq -e '.layouts' <<<"$manifest_json" >/dev/null 2>&1; then
+    # Check if layouts section exists using utility
+    if ! layout_exists "$manifest_json"; then
         printf "\n🏷️  Layouts: None defined (using sequential spawning)\n"
         return 0
     fi
     
+    # Get layout count using utility
     local layout_count
-    layout_count=$(jq -r '.layouts | length' <<<"$manifest_json" 2>/dev/null)
+    layout_count=$(layout_get_count "$manifest_json")
     
     printf "\n🏷️  Layouts: %s defined\n" "$layout_count"
     
-    # List all layouts
-    while IFS= read -r layout_entry; do
-        local layout_name row_count
-        layout_name=$(echo "$layout_entry" | jq -r '.key' 2>/dev/null)
-        row_count=$(echo "$layout_entry" | jq -r '.value | length' 2>/dev/null)
+    # List all layouts using utility
+    while IFS= read -r layout_name; do
+        # Get layout info and row count
+        local layout_json row_count
+        layout_json=$(layout_extract_by_name "$manifest_json" "$layout_name")
+        row_count=$(layout_get_row_count "$layout_json")
         
         printf "  • %s: %s tag%s" "$layout_name" "$row_count" "$([ "$row_count" -ne 1 ] && echo "s" || echo "")"
         
-        # Validate this layout
+        # Validate this layout using comprehensive validation
         local validation_result
-        if validation_result=$(manifest_extract_layout "$manifest_json" "$layout_name" 2>&1); then
+        if validation_result=$(layout_validate_comprehensive "$manifest_json" "$layout_name" 2>&1); then
             printf " ✅\n"
         else
             printf " ❌\n"
             printf "    Error: %s\n" "$validation_result"
         fi
-    done < <(jq -c '.layouts | to_entries[]' <<<"$manifest_json" 2>/dev/null)
+    done < <(layout_get_all_names "$manifest_json")
     
-    # Check default_layout
+    # Check default_layout using utility
     local default_layout
-    default_layout=$(jq -r '.default_layout // empty' <<<"$manifest_json" 2>/dev/null)
-    
-    if [[ -n $default_layout && $default_layout != "null" ]]; then
+    if default_layout=$(layout_get_default "$manifest_json"); then
         printf "\n🎯 Default Layout: %s" "$default_layout"
         
-        # Validate default layout exists
-        if jq -e --arg layout "$default_layout" '.layouts[$layout]' <<<"$manifest_json" >/dev/null 2>&1; then
+        # Validate default layout exists using utility
+        if layout_validate_exists "$manifest_json" "$default_layout"; then
             printf " ✅\n"
         else
             printf " ❌ (layout not found)\n"

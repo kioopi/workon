@@ -20,6 +20,8 @@
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=lib/config.sh disable=SC1091
 source "$SCRIPT_DIR/config.sh"
+# shellcheck source=lib/layout.sh disable=SC1091
+source "$SCRIPT_DIR/layout.sh"
 
 # Find workon.yaml by walking up directory tree or searching configured project paths
 manifest_find() {
@@ -149,61 +151,26 @@ manifest_extract_layout() {
     local manifest_json="$1"
     local layout_name="${2:-}"
     
-    # Check if layouts section exists
-    if ! jq -e '.layouts' <<<"$manifest_json" >/dev/null 2>&1; then
+    # Check if layouts exist using utility
+    if ! layout_exists "$manifest_json"; then
         # No layouts defined - return empty to maintain backward compatibility
         return 0
     fi
     
-    # If no layout name provided, try to use default_layout
+    # Get layout name (use default if not provided)
     if [[ -z $layout_name ]]; then
-        layout_name=$(jq -r '.default_layout // empty' <<<"$manifest_json" 2>/dev/null)
-        if [[ -z $layout_name || $layout_name == "null" ]]; then
+        if ! layout_name=$(layout_get_default "$manifest_json"); then
             # No default layout - return empty to maintain backward compatibility
             return 0
         fi
     fi
     
-    # Validate that the requested layout exists
-    if ! jq -e --arg layout "$layout_name" '.layouts[$layout]' <<<"$manifest_json" >/dev/null 2>&1; then
-        config_die "Layout '$layout_name' not found in manifest"
+    # Comprehensive validation using utility
+    local validation_error
+    if ! validation_error=$(layout_validate_comprehensive "$manifest_json" "$layout_name" 2>&1); then
+        config_die "$validation_error"
     fi
     
-    # Extract the layout array and validate structure
-    local layout_json
-    if ! layout_json=$(jq -c --arg layout "$layout_name" '.layouts[$layout]' <<<"$manifest_json" 2>/dev/null); then
-        config_die "Failed to extract layout '$layout_name'"
-    fi
-    
-    # Validate that layout is an array
-    if ! jq -e 'type == "array"' <<<"$layout_json" >/dev/null 2>&1; then
-        config_die "Layout '$layout_name' must be an array of resource groups"
-    fi
-    
-    # Validate row count (max 9 tags for AwesomeWM)
-    local row_count
-    row_count=$(jq 'length' <<<"$layout_json" 2>/dev/null)
-    if [[ "$row_count" -gt 9 ]]; then
-        config_die "Layout '$layout_name' has $row_count rows, but maximum is 9 (AwesomeWM tag limit)"
-    fi
-    
-    # Validate that all referenced resources exist
-    local resources_json
-    resources_json=$(jq -c '.resources | keys' <<<"$manifest_json" 2>/dev/null)
-    
-    while IFS= read -r row_json; do
-        [[ -z $row_json ]] && continue
-        
-        # Check each resource in the row
-        while IFS= read -r resource; do
-            [[ -z $resource || $resource == "null" ]] && continue
-            
-            if ! jq -e --arg res "$resource" '. | contains([$res])' <<<"$resources_json" >/dev/null 2>&1; then
-                config_die "Layout '$layout_name' references undefined resource: '$resource'"
-            fi
-        done < <(jq -r '.[]' <<<"$row_json" 2>/dev/null)
-    done < <(jq -c '.[]' <<<"$layout_json" 2>/dev/null)
-    
-    # Return the validated layout
-    printf '%s' "$layout_json"
+    # Extract and return validated layout using utility
+    layout_extract_by_name "$manifest_json" "$layout_name"
 }
