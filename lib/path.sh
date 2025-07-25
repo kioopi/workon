@@ -136,7 +136,13 @@ path_expand_to_absolute() {
 path_resource_exists() {
     local path="$1"
     
-    # Check if it's a file first
+    # Check if it's a URL first (any protocol followed by ://)
+    if [[ "$path" == *://* ]]; then
+        printf "Yes (URL)"
+        return 0
+    fi
+    
+    # Check if it's a file
     if [[ -f "$path" ]]; then
         printf "Yes (file)"
         return 0
