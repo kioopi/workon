@@ -67,11 +67,8 @@ resolve_show_results() {
 resolve_check_existence() {
     local expanded_command="$1"
     
-    if path_resource_exists "$expanded_command"; then
-        printf "Yes"
-    else
-        printf "No"
-    fi
+    # path_resource_exists already provides the formatted output
+    path_resource_exists "$expanded_command"
 }
 
 # Show resolved command for a specific resource
