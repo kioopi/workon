@@ -119,7 +119,7 @@ spawn_execute_lua_script() {
     # Escape the JSON for Lua string literal
     verbose_log "Escaping JSON configuration for Lua..."
     local escaped_config
-    escaped_config=$(printf '%s' "$spawn_config" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/g' | tr -d '\n')
+    escaped_config=$(printf '%s' "$spawn_config" | jq -R -s '@json')
     debug_var "escaped_config"
     
     # Prepare Lua code
