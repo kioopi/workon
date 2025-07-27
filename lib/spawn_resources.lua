@@ -10,6 +10,9 @@ if not workon_dir then
     error("WORKON_DIR not available - this script must be called from the workon command")
 end
 
+-- Get WORKON_PROJECT_DIR from global variable (set by the workon script)
+local project_dir = WORKON_PROJECT_DIR or os.getenv("WORKON_PROJECT_DIR") or workon_dir
+
 -- Add module path
 package.path = package.path .. ";" .. workon_dir .. "/lib/lua-workon/src/?.lua"
 
@@ -34,6 +37,7 @@ if file then file:close() end
 
 debug_log("=== WorkOn Lua Script Starting ===")
 debug_log("WORKON_DIR = " .. (workon_dir or "nil"))
+debug_log("WORKON_PROJECT_DIR = " .. (project_dir or "nil"))
 
 -- Check if we have a configuration (it could be set as a global variable)
 local config = nil
@@ -254,7 +258,7 @@ if config.layout and type(config.layout) == "table" and #config.layout > 0 then
                     if not resource.name or not resource.cmd then
                         io.stderr:write("Warning: Resource " .. resource_name .. " missing name or cmd\n")
                     else
-                        if spawn_resource(resource, config.session_file, tag_index, workon_dir) then
+                        if spawn_resource(resource, config.session_file, tag_index, project_dir) then
                             success_count = success_count + 1
                         end
                     end
@@ -279,7 +283,7 @@ else
         if not resource.name or not resource.cmd then
             io.stderr:write("Warning: Resource " .. i .. " missing name or cmd\n")
         else
-            if spawn_resource(resource, config.session_file, nil, workon_dir) then
+            if spawn_resource(resource, config.session_file, nil, project_dir) then
                 success_count = success_count + 1
             end
         end

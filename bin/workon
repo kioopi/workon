@@ -129,7 +129,7 @@ workon_start() {
     fi
     
     # Launch all resources using single Lua script
-    if launch_all_resources_with_session "$session_file" "$resources" "$layout"; then
+    if launch_all_resources_with_session "$session_file" "$resources" "$layout" "$manifest_dir"; then
         # Report final status
         if [[ -f "$session_file" ]]; then
             local final_count

@@ -89,6 +89,7 @@ spawn_execute_lua_script() {
     local session_file="$1"
     local resources_json="$2"
     local layout_json="${3:-}"
+    local project_dir="${4:-$PWD}"
     
     debug_section "Lua Script Execution"
     
@@ -125,6 +126,7 @@ spawn_execute_lua_script() {
     local workon_dir="${WORKON_DIR:-$PWD}"
     local lua_code="
         WORKON_DIR = '$workon_dir'
+        WORKON_PROJECT_DIR = '$project_dir'
         WORKON_SPAWN_CONFIG = '$escaped_config'
         dofile('$workon_dir/lib/spawn_resources.lua')
     "
@@ -185,6 +187,7 @@ spawn_launch_all_resources() {
     local session_file="$1"
     local resources="$2"  # Base64-encoded resource entries
     local layout="${3:-}"  # Optional layout JSON
+    local project_dir="${4:-$PWD}"  # Project directory for working directory
     
     debug_section "Resource Spawning Orchestration"
     
@@ -248,7 +251,7 @@ spawn_launch_all_resources() {
     
     # Execute Lua script
     verbose_log "Executing AwesomeWM spawn script..."
-    if ! spawn_execute_lua_script "$session_file" "$resources_json" "$layout"; then
+    if ! spawn_execute_lua_script "$session_file" "$resources_json" "$layout" "$project_dir"; then
         error_log "spawn" "Failed to execute AwesomeWM Lua script"
         return 1
     fi
