@@ -86,6 +86,24 @@ function M.append_to_session(filepath, entry)
         session_data = {}
     end
     
+    -- Check for duplicates based on name and pid to prevent multiple entries for same resource
+    for i, existing_entry in ipairs(session_data) do
+        if existing_entry.name == entry.name and existing_entry.pid == entry.pid then
+            -- Update existing entry with new data (callback adds window info to immediate_pid entry)
+            -- But preserve the original tracking method
+            local original_tracking_method = existing_entry.tracking_method
+            for key, value in pairs(entry) do
+                existing_entry[key] = value
+            end
+            -- Restore original tracking method (immediate_pid is more important than missing)
+            if original_tracking_method then
+                existing_entry.tracking_method = original_tracking_method
+            end
+            M.write_session_atomic(filepath, session_data)
+            return true
+        end
+    end
+    
     table.insert(session_data, entry)
     M.write_session_atomic(filepath, session_data)
     

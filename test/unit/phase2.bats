@@ -177,20 +177,26 @@ JSON
     # Mock kill function using bash function override
     kill() {
         echo "kill $*" >> "$TEST_DIR/kill_log"
-        # Simulate process exists for -0 check, then simulate successful termination
-        if [[ "$1" == "-0" ]]; then
-            return 0
+        # Simulate process exists for first -0 check, then dies after TERM signal
+        if [[ "$1" == "-0" && "$2" == "99999" ]]; then
+            if [[ ! -f "$TEST_DIR/process_killed" ]]; then
+                return 0  # Process exists initially
+            else
+                return 1  # Process no longer exists after TERM
+            fi
         elif [[ "$1" == "-TERM" ]]; then
             echo "TERM $2" >> "$TEST_DIR/kill_log"
+            touch "$TEST_DIR/process_killed"  # Mark process as killed
             return 0
         else
             echo "KILL $2" >> "$TEST_DIR/kill_log" 
             return 0
         fi
     }
+    export -f kill
     
     # Act
-    run stop_resource "$session_entry"
+    WORKON_VERBOSE=1 run stop_resource "$session_entry"
     
     # Assert
     assert_success
@@ -285,15 +291,20 @@ JSON
     kill() {
         return 1
     }
+    export -f kill
     
     # Mock xdotool to simulate successful window close
     xdotool() {
         echo "xdotool $*" >> "$TEST_DIR/xdotool_log"
-        if [[ "$1" == "search" && "$4" == "windowclose" ]]; then
+        if [[ "$*" == "search --pid 1" ]]; then
+            echo "12345"  # Return a window ID
             return 0
+        elif [[ "$*" == "search --pid 1 windowclose" ]]; then
+            return 0  # Successfully close window
         fi
         return 1
     }
+    export -f xdotool
     
     # Mock command to report xdotool as available
     command() {
@@ -303,9 +314,10 @@ JSON
         # Fall back to real command for other uses (but use builtin command)
         builtin command "$@"
     }
+    export -f command
     
     # Act
-    run stop_resource "$session_entry"
+    WORKON_VERBOSE=1 run stop_resource "$session_entry"
     
     # Assert
     assert_success

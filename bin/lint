@@ -11,7 +11,20 @@ SHELL_SCRIPTS=(
     "bin/check-deps"
     "bin/lint"
     "bin/pls-open"
+    "lib/cleanup.sh"
+    "lib/config.sh"
+    "lib/debug.sh"
+    "lib/layout.sh"
+    "lib/manifest.sh"
+    "lib/path.sh"
+    "lib/session.sh"
+    "lib/spawn.sh"
+    "lib/template.sh"
     "lib/workon.sh"
+    "lib/commands/info.sh"
+    "lib/commands/resolve.sh"
+    "lib/commands/utils.sh"
+    "lib/commands/validate.sh"
 )
 
 usage() {
@@ -62,7 +75,7 @@ for script in "${SHELL_SCRIPTS[@]}"; do
         continue
     fi
     
-    if ! shellcheck "$script" 2>/dev/null; then
+    if ! shellcheck -x "$script" 2>/dev/null; then
         echo "❌ ShellCheck failed: $script" >&2
         FAILED=true
     elif [[ $QUIET == false ]]; then

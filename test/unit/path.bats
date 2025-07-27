@@ -242,3 +242,64 @@ teardown() {
     [ "$status" -eq 0 ]
     [ "$output" = "Yes (URL)" ]
 }
+
+# ─── Desktop Application Tests (TDD) ────────────────────────────────────────
+
+@test "path_resource_exists: should detect desktop application IDs (FAILING)" {
+    # This test INTENTIONALLY FAILS to demonstrate the bug
+    # Desktop ID format: reverse domain notation with dots
+    run path_resource_exists "dev.zed.Zed"
+    
+    [ "$status" -eq 0 ]
+    # Currently returns "No" but should detect desktop applications
+    [[ "$output" =~ ^Yes ]]
+}
+
+@test "path_resource_exists: should detect desktop apps with arguments (FAILING)" {
+    # This test INTENTIONALLY FAILS to demonstrate the bug
+    run path_resource_exists "dev.zed.Zed index.html"
+    
+    [ "$status" -eq 0 ]
+    # Currently returns "No" but should detect desktop applications
+    [[ "$output" =~ ^Yes ]]
+}
+
+@test "path_resource_exists: should detect available desktop applications" {
+    # Test with dev.zed.Zed (confirmed to exist on this system)
+    run path_resource_exists "dev.zed.Zed"
+    
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ ^Yes ]]
+}
+
+@test "path_resource_exists: should differentiate desktop IDs from files" {
+    # Create a test file with similar name
+    touch "fake.desktop.app"
+    
+    # Test file (should work)
+    run path_resource_exists "fake.desktop.app"
+    [ "$status" -eq 0 ]
+    [ "$output" = "Yes (file)" ]
+    
+    # Test non-existent desktop ID (should return No)
+    run path_resource_exists "org.example.NonExistent"
+    [ "$status" -eq 1 ]
+    [ "$output" = "No" ]
+    
+    # Test existing desktop ID (should work)
+    run path_resource_exists "dev.zed.Zed"
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ ^Yes ]]
+}
+
+@test "path_resource_exists: should handle mixed desktop ID and file arguments (FAILING)" {
+    # Create a test file
+    touch "test.txt"
+    
+    # Desktop app with file argument (common pattern)
+    run path_resource_exists "dev.zed.Zed test.txt"
+    
+    [ "$status" -eq 0 ]
+    # Should detect the desktop app, not just check if whole string is a file
+    [[ "$output" =~ ^Yes ]]
+}

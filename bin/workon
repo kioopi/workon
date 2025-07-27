@@ -29,6 +29,9 @@ Commands:
 Options:
   -v, --version     Show version information
   -h, --help        Show this help
+  --debug           Enable debug mode (shows all internal operations)
+  --verbose         Enable verbose output (shows progress details)
+  --dry-run         Validate and show what would be executed without running
 
 Arguments:
   PROJECT_PATH      Directory containing workon.yaml (default: current directory)
@@ -36,13 +39,18 @@ Arguments:
 Examples:
   workon                    # Start workspace from current directory
   workon start ~/my-project # Start workspace from specific directory
+  workon --debug start      # Start with full debug output
+  workon --verbose start    # Start with progress details
+  workon --dry-run start    # Show what would be executed
   workon stop               # Stop current workspace session
-  workon stop ~/my-project  # Stop workspace session in specific directory
   workon info               # Show system information and dependencies
-  workon info sessions      # List all active sessions
-  workon info session       # Show details for current session
   workon validate           # Validate current directory's workon.yaml
   workon resolve ide        # Show resolved command for 'ide' resource
+
+Environment Variables:
+  WORKON_DEBUG=1           Enable debug mode globally
+  WORKON_VERBOSE=1         Enable verbose mode globally
+  WORKON_DRY_RUN=1         Enable dry-run mode globally
 EOF
 }
 
@@ -51,40 +59,69 @@ workon_start() {
     local project_path="${1:-$PWD}"
     local manifest
     
+    # Show debug information
+    debug_show_environment
+    debug_show_system_info
+    
+    # Run pre-flight checks if debug or verbose mode
+    if [[ "${WORKON_DEBUG:-0}" == "1" ]] || [[ "${WORKON_VERBOSE:-0}" == "1" ]]; then
+        verbose_log "Running pre-flight system checks..."
+        if ! debug_preflight_checks; then
+            if [[ "${WORKON_DEBUG:-0}" == "1" ]]; then
+                die "Pre-flight checks failed. Use --debug for more details."
+            else
+                warn_log "Some pre-flight checks failed, but continuing anyway"
+            fi
+        fi
+    fi
+    
     # Check dependencies
+    verbose_log "Checking basic dependencies..."
+    # shellcheck disable=SC2119
     check_dependencies
 
     # Find manifest file
+    verbose_log "Looking for workon.yaml in $project_path and parent directories..."
     if ! manifest=$(find_manifest "$project_path"); then
         die "No workon.yaml found in $project_path or parent directories"
     fi
     
-    printf 'Found manifest: %s\n' "$manifest" >&2
+    success_log "Found manifest: $manifest"
+    debug_var "manifest"
     
     # Parse and validate manifest
+    verbose_log "Parsing and validating manifest..."
     local manifest_json
     manifest_json=$(parse_manifest "$manifest")
+    debug_file "$manifest" "workon.yaml manifest"
     
     # Extract resources
+    verbose_log "Extracting resources from manifest..."
     local resources
     resources=$(extract_resources "$manifest_json")
+    debug_var "resources"
     
     # Extract layout configuration (optional)
+    verbose_log "Checking for layout configuration..."
     local layout=""
     layout=$(manifest_extract_layout "$manifest_json" || true)
+    debug_var "layout"
 
     # Change to manifest directory for relative paths
     local manifest_dir
     manifest_dir=$(dirname "$manifest")
+    verbose_log "Changing to manifest directory: $manifest_dir"
     cd "$manifest_dir" || die "Cannot change to manifest directory: $manifest_dir"
     
     # Initialize session tracking
+    verbose_log "Setting up session tracking..."
     mkdir -p "$(cache_dir)" || die "Cannot create cache directory"
     local session_file
     session_file=$(cache_file "$manifest_dir")
+    debug_var "session_file"
 
-    echo "Starting workspace in: $manifest_dir" >&2
-    echo "Session file: $session_file" >&2
+    success_log "Starting workspace in: $manifest_dir"
+    verbose_log "Session file: $session_file"
     
     # Check if session already exists
     if [[ -f $session_file ]]; then
@@ -93,7 +130,7 @@ workon_start() {
     fi
     
     # Launch all resources using single Lua script
-    if launch_all_resources_with_session "$session_file" "$resources" "$layout"; then
+    if launch_all_resources_with_session "$session_file" "$resources" "$layout" "$manifest_dir"; then
         # Report final status
         if [[ -f "$session_file" ]]; then
             local final_count
@@ -131,13 +168,18 @@ workon_stop() {
         return 0
     fi
     
-    printf 'Stopping session: %s\n' "$(basename "$session_file")" >&2
+    verbose_log 'Stopping session: %s\n' "$(basename "$session_file")" >&2
     
     # Stop session with file locking
     with_lock "$session_file" stop_session_impl "$session_file"
     
     printf 'Session stopped and cleaned up\n' >&2
 }
+
+# Global debug flags
+export WORKON_DEBUG="${WORKON_DEBUG:-0}"
+export WORKON_VERBOSE="${WORKON_VERBOSE:-0}"
+export WORKON_DRY_RUN="${WORKON_DRY_RUN:-0}"
 
 # Parse command line arguments
 command=""
@@ -150,6 +192,20 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             exit 0
+            ;;
+        --debug)
+            export WORKON_DEBUG=1
+            export WORKON_VERBOSE=1  # Debug implies verbose
+            shift
+            ;;
+        --verbose)
+            export WORKON_VERBOSE=1
+            shift
+            ;;
+        --dry-run)
+            export WORKON_DRY_RUN=1
+            export WORKON_VERBOSE=1  # Dry-run implies verbose
+            shift
             ;;
         start|stop|info|validate|resolve)
             command="$1"
