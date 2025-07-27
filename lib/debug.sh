@@ -125,7 +125,8 @@ debug_check_awesome() {
     local test_result
     if test_result=$(awesome-client 'return "connectivity-test"' 2>&1); then
         # Trim whitespace from the response
-        test_result=$(printf '%s' "$test_result" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        test_result="${test_result#"${test_result%%[![:space:]]*}"}"
+        test_result="${test_result%"${test_result##*[![:space:]]}"}"
         if [[ "$test_result" == 'string "connectivity-test"' ]]; then
             success_log "awesome-client connectivity confirmed"
             return 0
