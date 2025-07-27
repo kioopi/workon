@@ -77,6 +77,7 @@ workon_start() {
     
     # Check dependencies
     verbose_log "Checking basic dependencies..."
+    # shellcheck disable=SC2119
     check_dependencies
 
     # Find manifest file

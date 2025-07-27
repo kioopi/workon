@@ -77,8 +77,6 @@ info_show_sessions_list() {
             resource_count="0"
         fi
         
-        local parent_dir
-        parent_dir=$(dirname "$session_file")
         printf "  • %s (%s resources)\n" "$session_name" "$resource_count"
         printf "    📄 %s\n\n" "$session_file"
     done
