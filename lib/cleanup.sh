@@ -19,6 +19,8 @@ set -euo pipefail
 # Source required modules
 # shellcheck source=lib/config.sh
 source "${BASH_SOURCE[0]%/*}/config.sh"
+# shellcheck source=lib/debug.sh
+source "${BASH_SOURCE[0]%/*}/debug.sh"
 # shellcheck source=lib/session.sh
 source "${BASH_SOURCE[0]%/*}/session.sh"
 
@@ -115,12 +117,12 @@ cleanup_stop_by_xdotool() {
     if [[ -n $class ]]; then
         cleanup_debug_log "Searching for windows with class '$class' (fallback only)"
         # Don't use broad class search - too dangerous for terminals
-        cleanup_debug_log "Skipping class-based search for '$class' to prevent closing unrelated windows"
+        debug_log "Skipping class-based search for '$class' to prevent closing unrelated windows"
     fi
     
     # Skip instance-based search - also too broad and dangerous for terminals
     if [[ -n $instance ]]; then
-        cleanup_debug_log "Skipping instance-based search for '$instance' - too broad, could close unrelated windows"
+        debug_log "Skipping instance-based search for '$instance' - too broad, could close unrelated windows"
     fi
     
     return 1
@@ -188,7 +190,7 @@ cleanup_stop_resource() {
     
     cleanup_debug_log "Extracted metadata: name='$name', pid='$pid', class='$class', instance='$instance', cmd='$cmd', tracking='$tracking_method'"
     
-    verbose_log 'Stopping %s (PID: %s)\n' "${name:-unknown}" "${pid:-unknown}" >&2
+    verbose_log "Stopping ${name:-unknown} (PID: ${pid:-unknown})"
     
     # Try cleanup strategies in order
     cleanup_debug_log "Attempting cleanup strategy 1: PID-based cleanup"

@@ -18,6 +18,8 @@ set -euo pipefail
 # Source required modules
 # shellcheck source=lib/config.sh
 source "${BASH_SOURCE[0]%/*}/config.sh"
+# shellcheck source=lib/debug.sh
+source "${BASH_SOURCE[0]%/*}/debug.sh"
 # shellcheck source=lib/template.sh
 source "${BASH_SOURCE[0]%/*}/template.sh"
 # shellcheck source=lib/path.sh

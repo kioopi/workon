@@ -11,6 +11,11 @@ setup() {
     mkdir -p "$WORKON_CACHE_DIR"
     mkdir -p "$TEST_DIR/project"
     
+    # Disable all logging output for clean testing
+    export WORKON_DEBUG=0
+    export WORKON_VERBOSE=0
+    export WORKON_DRY_RUN=0
+    
     # Mock config_die function for testing
     config_die() {
         printf 'workon: %s\n' "$*" >&2
@@ -54,8 +59,9 @@ teardown() {
     local encoded_resource
     encoded_resource=$(printf '%s' "$resource_json" | base64)
     
-    run spawn_prepare_resources_json "$encoded_resource"
-    [[ $status -eq 0 ]]
+    # Capture stdout only (logging is disabled by environment variables)
+    output=$(spawn_prepare_resources_json "$encoded_resource" 2>/dev/null)
+    [[ $? -eq 0 ]]
     
     # Verify JSON structure
     local result_count
@@ -80,8 +86,9 @@ teardown() {
     resource2=$(printf '{"key": "browser", "value": "firefox"}' | base64)
     encoded_resources="$resource1"$'\n'"$resource2"
     
-    run spawn_prepare_resources_json "$encoded_resources"
-    [[ $status -eq 0 ]]
+    # Capture stdout only (logging disabled by environment)
+    output=$(spawn_prepare_resources_json "$encoded_resources" 2>/dev/null)
+    [[ $? -eq 0 ]]
     
     # Verify we have 2 resources
     local result_count
@@ -92,8 +99,8 @@ teardown() {
 @test "spawn_prepare_resources_json: handles empty input" {
     source lib/spawn.sh
     
-    run spawn_prepare_resources_json ""
-    [[ $status -eq 0 ]]
+    output=$(spawn_prepare_resources_json "" 2>/dev/null)
+    [[ $? -eq 0 ]]
     [[ "$output" == "[]" ]]
 }
 
@@ -107,8 +114,9 @@ teardown() {
     local encoded_resource
     encoded_resource=$(printf '%s' "$resource_json" | base64)
     
-    run spawn_prepare_resources_json "$encoded_resource"
-    [[ $status -eq 0 ]]
+    # Capture stdout only (logging disabled by environment)
+    output=$(spawn_prepare_resources_json "$encoded_resource" 2>/dev/null)
+    [[ $? -eq 0 ]]
     
     # Verify template was expanded
     local cmd
@@ -160,7 +168,8 @@ teardown() {
         echo '[{"pid": 123, "name": "test"}]' > "$session_file"
     ) &
     
-    run spawn_wait_for_session_update "$session_file" 0 5 2>&1
+    # Enable verbose logging for this test
+    WORKON_VERBOSE=1 run spawn_wait_for_session_update "$session_file" 0 5 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "Session file updated" ]]
 }
@@ -170,7 +179,8 @@ teardown() {
     
     local session_file="$TEST_DIR/timeout-test.json"
     
-    run spawn_wait_for_session_update "$session_file" 0 1 2>&1
+    # Enable verbose logging for this test  
+    WORKON_VERBOSE=1 run spawn_wait_for_session_update "$session_file" 0 1 2>&1
     [[ $status -eq 1 ]]
     [[ "$output" =~ "Session file not updated within timeout" ]]
 }
@@ -189,7 +199,8 @@ teardown() {
         echo '[{"pid": 123, "name": "first"}, {"pid": 456, "name": "second"}]' > "$session_file"
     ) &
     
-    run spawn_wait_for_session_update "$session_file" 1 5 2>&1
+    # Enable verbose logging for this test
+    WORKON_VERBOSE=1 run spawn_wait_for_session_update "$session_file" 1 5 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "updated with 2 entries" ]]
 }
@@ -205,9 +216,10 @@ teardown() {
     local encoded_resource
     encoded_resource=$(printf '%s' "$resource_json" | base64)
     
-    run spawn_launch_all_resources "$session_file" "$encoded_resource" 2>&1
+    # Enable verbose logging for this test
+    WORKON_VERBOSE=1 run spawn_launch_all_resources "$session_file" "$encoded_resource" 2>&1
     [[ $status -eq 0 ]]
-    [[ "$output" =~ "Preparing resources for spawning" ]]
+    [[ "$output" =~ "Preparing resources for sequential spawning" ]]
     [[ "$output" =~ "awesome-client called" ]]
 }
 
@@ -216,7 +228,8 @@ teardown() {
     
     local session_file="$TEST_DIR/empty-test.json"
     
-    run spawn_launch_all_resources "$session_file" "" 2>&1
+    # Enable verbose logging for this test
+    WORKON_VERBOSE=1 run spawn_launch_all_resources "$session_file" "" 2>&1
     [[ $status -eq 1 ]]
     [[ "$output" =~ "No resources to spawn" ]]
 }
@@ -235,7 +248,8 @@ teardown() {
     local encoded_resource
     encoded_resource=$(printf '%s' "$resource_json" | base64)
     
-    run spawn_launch_all_resources "$session_file" "$encoded_resource" 2>&1
+    # Enable verbose logging for this test
+    WORKON_VERBOSE=1 run spawn_launch_all_resources "$session_file" "$encoded_resource" 2>&1
     [[ $status -eq 1 ]]
     [[ "$output" =~ "Session file not updated within timeout" ]]
 }
@@ -256,7 +270,7 @@ teardown() {
     
     local all_resources="$editor_res"$'\n'"$browser_res"$'\n'"$terminal_res"
     
-    run spawn_launch_all_resources "$session_file" "$all_resources" 2>&1
+    run spawn_launch_all_resources "$session_file" "$all_resources" 2>/dev/null
     [[ $status -eq 0 ]]
     
     # Verify session file was created
@@ -282,7 +296,8 @@ teardown() {
     local encoded_resource
     encoded_resource=$(printf '%s' "$resource_json" | base64)
     
-    run spawn_launch_all_resources "$session_file" "$encoded_resource" 2>&1
+    # Enable verbose logging for this test
+    WORKON_VERBOSE=1 run spawn_launch_all_resources "$session_file" "$encoded_resource" 2>&1
     [[ $status -eq 0 ]]
     
     # The output should show the expanded absolute path
@@ -296,7 +311,8 @@ teardown() {
     local invalid_resource="invalid-base64-data"
     local session_file="$TEST_DIR/error-test.json"
     
-    run spawn_launch_all_resources "$session_file" "$invalid_resource" 2>&1
+    # Enable verbose logging for this test
+    WORKON_VERBOSE=1 run spawn_launch_all_resources "$session_file" "$invalid_resource" 2>&1
     [[ $status -eq 1 ]]
     [[ "$output" =~ "No resources to spawn" ]]
 }

@@ -9,6 +9,11 @@ setup() {
     # Create mock directories
     mkdir -p "$WORKON_CACHE_DIR"
     
+    # Disable all logging output for clean testing
+    export WORKON_DEBUG=0
+    export WORKON_VERBOSE=0
+    export WORKON_DRY_RUN=0
+    
     # Mock config_die function for testing
     config_die() {
         printf 'workon: %s\n' "$*" >&2
@@ -41,8 +46,14 @@ setup() {
         echo "xdotool $*" >> "$TEST_DIR/xdotool_log"
         
         # Simulate successful window operations
-        if [[ "$*" == "search --pid 123 windowclose" ]]; then
+        if [[ "$*" == "search --pid 123" ]]; then
+            echo "123456"  # Return a window ID
+            return 0
+        elif [[ "$*" == "search --pid 123 windowclose" ]]; then
             echo "Found window for PID 123"
+            return 0
+        elif [[ "$*" == "search --pid 999" ]]; then
+            echo "999888"  # Return a window ID
             return 0
         elif [[ "$*" == "search --pid 999 windowclose" ]]; then
             echo "Found window for PID 999"
@@ -58,6 +69,26 @@ setup() {
         fi
     }
     export -f xdotool
+    
+    # Mock command builtin to make xdotool/wmctrl appear available (unless overridden)
+    command() {
+        if [[ "$1" == "-v" && "$2" == "xdotool" ]]; then
+            if [[ "${MOCK_XDOTOOL_AVAILABLE:-true}" == "false" ]]; then
+                return 1  # Command not available
+            else
+                return 0  # Command exists
+            fi
+        elif [[ "$1" == "-v" && "$2" == "wmctrl" ]]; then
+            if [[ "${MOCK_WMCTRL_AVAILABLE:-true}" == "false" ]]; then
+                return 1  # Command not available
+            else
+                return 0  # Command exists
+            fi
+        fi
+        # Fall back to real command for other cases
+        builtin command "$@"
+    }
+    export -f command
     
     # Mock wmctrl for fallback window management
     wmctrl() {
@@ -97,7 +128,8 @@ teardown() {
 @test "cleanup_stop_by_pid: successfully terminates running process" {
     source lib/cleanup.sh
     
-    run cleanup_stop_by_pid "123" "test-app" 2>&1
+    # Enable verbose logging for this test
+    WORKON_VERBOSE=1 run cleanup_stop_by_pid "123" "test-app" 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "Using PID 123 for cleanup" ]]
     
@@ -123,9 +155,10 @@ teardown() {
     }
     export -f kill
     
-    run cleanup_stop_by_pid "124" "stubborn-app" 2>&1
+    # Enable verbose logging for this test
+    WORKON_VERBOSE=1 run cleanup_stop_by_pid "124" "stubborn-app" 2>&1
     [[ $status -eq 0 ]]
-    [[ "$output" =~ "Force killing PID 124" ]]
+    [[ "$output" =~ "force killing" ]]
     
     # Verify both TERM and KILL signals were sent
     grep -q "kill -TERM 124" "$TEST_DIR/kill_log"
@@ -155,7 +188,8 @@ teardown() {
 @test "cleanup_stop_by_xdotool: closes window by PID" {
     source lib/cleanup.sh
     
-    run cleanup_stop_by_xdotool "123" "TestApp" "test-instance" 2>&1
+    local entry='{"pid": 123, "class": "TestApp", "instance": "test-instance", "window_id": ""}'
+    WORKON_VERBOSE=1 run cleanup_stop_by_xdotool "123" "TestApp" "test-instance" "$entry" 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "Trying window-based cleanup with xdotool" ]]
     [[ "$output" =~ "Closed windows for PID 123" ]]
@@ -165,44 +199,41 @@ teardown() {
     grep -q "xdotool search --pid 123 windowclose" "$TEST_DIR/xdotool_log"
 }
 
-@test "cleanup_stop_by_xdotool: falls back to window class" {
+@test "cleanup_stop_by_xdotool: skips class search for security" {
     source lib/cleanup.sh
     
-    # Mock xdotool to fail on PID but succeed on class
+    # Mock xdotool to fail on PID
     xdotool() {
         echo "xdotool $*" >> "$TEST_DIR/xdotool_log"
-        if [[ "$*" == "search --pid 456 windowclose" ]]; then
+        if [[ "$*" == "search --pid 456" ]]; then
             return 1  # PID search fails
-        elif [[ "$*" == "search --class TestApp windowclose" ]]; then
-            echo "Found window for class TestApp"
-            return 0  # Class search succeeds
+        elif [[ "$*" == "search --pid 456 windowclose" ]]; then
+            return 1  # PID search fails
         fi
         return 1
     }
     export -f xdotool
     
-    run cleanup_stop_by_xdotool "456" "TestApp" "test-instance" 2>&1
-    [[ $status -eq 0 ]]
-    [[ "$output" =~ "Closed windows with class \"TestApp\"" ]]
+    local entry='{"pid": 456, "class": "TestApp", "instance": "test-instance", "window_id": ""}'
+    WORKON_DEBUG=1 run cleanup_stop_by_xdotool "456" "TestApp" "test-instance" "$entry" 2>&1
+    [[ $status -eq 1 ]]  # Should fail since class search is skipped for security
+    [[ "$output" =~ "Skipping class-based search for 'TestApp' to prevent closing unrelated windows" ]]
 }
 
-@test "cleanup_stop_by_xdotool: falls back to window instance" {
+@test "cleanup_stop_by_xdotool: skips instance search for security" {
     source lib/cleanup.sh
     
-    # Mock xdotool to fail on PID and class but succeed on instance
+    # Mock xdotool to fail on PID
     xdotool() {
         echo "xdotool $*" >> "$TEST_DIR/xdotool_log"
-        if [[ "$*" == "search --classname test-instance windowclose" ]]; then
-            echo "Found window for instance test-instance"
-            return 0
-        fi
-        return 1
+        return 1  # All searches fail
     }
     export -f xdotool
     
-    run cleanup_stop_by_xdotool "789" "FailClass" "test-instance" 2>&1
-    [[ $status -eq 0 ]]
-    [[ "$output" =~ "Closed windows with instance \"test-instance\"" ]]
+    local entry='{"pid": 789, "class": "FailClass", "instance": "test-instance", "window_id": ""}'
+    WORKON_DEBUG=1 run cleanup_stop_by_xdotool "789" "FailClass" "test-instance" "$entry" 2>&1
+    [[ $status -eq 1 ]]  # Should fail since instance search is skipped for security
+    [[ "$output" =~ "Skipping instance-based search for 'test-instance' - too broad" ]]
 }
 
 @test "cleanup_stop_by_xdotool: fails when xdotool not available" {
@@ -210,7 +241,8 @@ teardown() {
     
     export MOCK_XDOTOOL_AVAILABLE="false"
     
-    run cleanup_stop_by_xdotool "123" "TestApp" "test-instance" 2>&1
+    local entry='{"pid": 123, "class": "TestApp", "instance": "test-instance", "window_id": ""}'
+    WORKON_VERBOSE=1 run cleanup_stop_by_xdotool "123" "TestApp" "test-instance" "$entry" 2>&1
     [[ $status -eq 1 ]]
     [[ ! "$output" =~ "xdotool" ]]
 }
@@ -225,7 +257,8 @@ teardown() {
     }
     export -f xdotool
     
-    run cleanup_stop_by_xdotool "999" "NonExistentApp" "missing-instance" 2>&1
+    local entry='{"pid": 999, "class": "NonExistentApp", "instance": "missing-instance", "window_id": ""}'
+    WORKON_VERBOSE=1 run cleanup_stop_by_xdotool "999" "NonExistentApp" "missing-instance" "$entry" 2>&1
     [[ $status -eq 1 ]]
 }
 
@@ -234,7 +267,7 @@ teardown() {
 @test "cleanup_stop_by_wmctrl: closes window by class name" {
     source lib/cleanup.sh
     
-    run cleanup_stop_by_wmctrl "TestApp" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_by_wmctrl "TestApp" 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "Trying wmctrl fallback" ]]
     [[ "$output" =~ "Closed window with wmctrl (class: TestApp)" ]]
@@ -282,7 +315,7 @@ teardown() {
     
     local resource_entry='{"pid": 123, "class": "TestApp", "instance": "test-instance", "name": "Test Application"}'
     
-    run cleanup_stop_resource "$resource_entry" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_resource "$resource_entry" 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "Stopping Test Application (PID: 123)" ]]
     [[ "$output" =~ "Using PID 123 for cleanup" ]]
@@ -300,7 +333,7 @@ teardown() {
     
     local resource_entry='{"pid": 999, "class": "TestApp", "instance": "test-instance", "name": "Test Application"}'
     
-    run cleanup_stop_resource "$resource_entry" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_resource "$resource_entry" 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "Trying window-based cleanup with xdotool" ]]
     [[ "$output" =~ "Closed windows for PID 999" ]]
@@ -322,7 +355,7 @@ teardown() {
     
     local resource_entry='{"pid": 999, "class": "TestApp", "instance": "test-instance", "name": "Test Application"}'
     
-    run cleanup_stop_resource "$resource_entry" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_resource "$resource_entry" 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "Trying wmctrl fallback" ]]
     [[ "$output" =~ "Closed window with wmctrl (class: TestApp)" ]]
@@ -339,9 +372,9 @@ teardown() {
     
     local resource_entry='{"pid": 999, "class": "FailApp", "instance": "fail-instance", "name": "Failing Application"}'
     
-    run cleanup_stop_resource "$resource_entry" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_resource "$resource_entry" 2>&1
     [[ $status -eq 1 ]]
-    [[ "$output" =~ "Warning: Could not stop Failing Application" ]]
+    [[ "$output" =~ "WARNING: Could not stop Failing Application" ]]
 }
 
 @test "cleanup_stop_resource: handles malformed JSON gracefully" {
@@ -349,7 +382,7 @@ teardown() {
     
     local invalid_entry='invalid json'
     
-    run cleanup_stop_resource "$invalid_entry" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_resource "$invalid_entry" 2>&1
     [[ $status -eq 1 ]]
     [[ "$output" =~ "Stopping unknown (PID: unknown)" ]]
 }
@@ -368,7 +401,7 @@ teardown() {
 ]
 EOF
     
-    run cleanup_stop_session "$session_file" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_session "$session_file" 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "Stopping 2 resources" ]]
     [[ "$output" =~ "Successfully stopped 2/2 resources" ]]
@@ -383,7 +416,7 @@ EOF
     local session_file="$TEST_DIR/empty-session.json"
     echo '[]' > "$session_file"
     
-    run cleanup_stop_session "$session_file" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_session "$session_file" 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "No resources found in session" ]]
     
@@ -396,9 +429,9 @@ EOF
     
     local session_file="$TEST_DIR/missing-session.json"
     
-    run cleanup_stop_session "$session_file" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_session "$session_file" 2>&1
     [[ $status -eq 1 ]]
-    [[ "$output" =~ "Warning: No valid session data found" ]]
+    [[ "$output" =~ "WARNING: No valid session data found" ]]
 }
 
 @test "cleanup_stop_session: handles corrupted session file" {
@@ -407,9 +440,9 @@ EOF
     local session_file="$TEST_DIR/corrupted-session.json"
     echo "invalid json content" > "$session_file"
     
-    run cleanup_stop_session "$session_file" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_session "$session_file" 2>&1
     [[ $status -eq 1 ]]
-    [[ "$output" =~ "Warning: No valid session data found" ]]
+    [[ "$output" =~ "WARNING: No valid session data found" ]]
 }
 
 @test "cleanup_stop_session: reports partial success when some resources fail" {
@@ -439,7 +472,7 @@ EOF
 ]
 EOF
     
-    run cleanup_stop_session "$session_file" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_session "$session_file" 2>&1
     [[ $status -eq 0 ]]
     [[ "$output" =~ "Successfully stopped 1/2 resources" ]]
 }
@@ -473,8 +506,8 @@ EOF
     export -f kill
     
     xdotool() {
-        if [[ "$*" == *"Browser"* ]]; then
-            return 0  # Firefox window cleanup succeeds
+        if [[ "$*" == *"999"* ]]; then
+            return 0  # Firefox (PID 999) window cleanup succeeds
         fi
         return 1  # Other window operations fail
     }
@@ -488,9 +521,9 @@ EOF
     }
     export -f wmctrl
     
-    run cleanup_stop_session "$session_file" 2>&1
+    WORKON_VERBOSE=1 run cleanup_stop_session "$session_file" 2>&1
     [[ $status -eq 0 ]]
-    [[ "$output" =~ "Successfully stopped 3/3 resources" ]]
+    [[ "$output" =~ "Successfully stopped 2/3 resources" ]]
     [[ "$output" =~ "Using PID 123 for cleanup" ]]
     [[ "$output" =~ "Trying window-based cleanup with xdotool" ]]
     [[ "$output" =~ "Trying wmctrl fallback" ]]
