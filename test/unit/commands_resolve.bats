@@ -263,3 +263,76 @@ EOF
     [ "$status" -eq 0 ]
     [ "$output" = "Yes (URL)" ]
 }
+
+# ─── Desktop Application Resolution Tests (TDD) ──────────────────────────────
+
+@test "resolve_check_existence should detect desktop applications" {
+    # This test will initially FAIL - demonstrating the bug
+    run resolve_check_existence "dev.zed.Zed"
+    
+    [ "$status" -eq 0 ]
+    # Currently returns "No" but should return "Yes (desktop app)" or similar
+    [[ "$output" =~ ^Yes ]]
+}
+
+@test "resolve_check_existence should handle desktop app with arguments" {
+    # This test will initially FAIL - demonstrating the bug  
+    run resolve_check_existence "dev.zed.Zed index.html"
+    
+    [ "$status" -eq 0 ]
+    # Currently returns "No" but should return "Yes (desktop app)" or similar
+    [[ "$output" =~ ^Yes ]]
+}
+
+@test "resolve_resource should work with desktop applications" {
+    # Create manifest with desktop application
+    cat > workon.yaml << EOF
+resources:
+  ide: dev.zed.Zed index.html
+EOF
+    
+    # This test will initially FAIL - demonstrating the bug
+    run resolve_resource "ide" "$TEST_DIR"
+    
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "📝 Raw command: dev.zed.Zed index.html" ]]
+    [[ "$output" =~ "✅ Resolved command: pls-open dev.zed.Zed index.html" ]]
+    # This is the key assertion that currently fails:
+    [[ "$output" =~ "📋 File/Command exists: Yes" ]]
+}
+
+@test "resolve_resource should detect common desktop applications" {
+    # Test with firefox (more likely to be installed)
+    cat > workon.yaml << EOF
+resources:
+  browser: firefox https://example.com
+EOF
+    
+    # This test will initially FAIL if firefox.desktop exists
+    run resolve_resource "browser" "$TEST_DIR"
+    
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "📝 Raw command: firefox https://example.com" ]]
+    [[ "$output" =~ "✅ Resolved command: pls-open firefox https://example.com" ]]
+    # This should pass if firefox is a command in PATH, but might fail for desktop ID resolution
+    [[ "$output" =~ "📋 File/Command exists: Yes" ]]
+}
+
+@test "resolve_resource should differentiate desktop IDs from regular commands" {
+    # Create manifest with both types
+    cat > workon.yaml << EOF
+resources:
+  command: echo hello
+  desktop: dev.zed.Zed README.md
+EOF
+    
+    # Test regular command (should work)
+    run resolve_resource "command" "$TEST_DIR"
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "📋 File/Command exists: Yes (command)" ]]
+    
+    # Test desktop application (should now work)
+    run resolve_resource "desktop" "$TEST_DIR"
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "📋 File/Command exists: Yes" ]]
+}

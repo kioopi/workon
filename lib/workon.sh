@@ -4,6 +4,8 @@
 
 # Source modular components
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+# shellcheck source=lib/debug.sh disable=SC1091
+source "$SCRIPT_DIR/debug.sh"
 # shellcheck source=lib/config.sh disable=SC1091
 source "$SCRIPT_DIR/config.sh"
 # shellcheck source=lib/manifest.sh disable=SC1091

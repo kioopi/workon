@@ -156,6 +156,16 @@ path_resource_exists() {
         return 0
     fi
     
+    # Check if first word is a desktop application ID
+    # Desktop IDs typically follow reverse domain notation: com.example.App, dev.zed.Zed, org.gnome.gedit
+    if [[ "$first_word" =~ ^[a-zA-Z0-9._-]+$ ]] && [[ "$first_word" == *.*.* ]] && [[ "$first_word" != */* ]]; then
+        # Use pls-open --dry-run to check if desktop application can be resolved
+        if pls-open --dry-run "$first_word" >/dev/null 2>&1; then
+            printf "Yes (desktop app)"
+            return 0
+        fi
+    fi
+    
     printf "No"
     return 1
 }
